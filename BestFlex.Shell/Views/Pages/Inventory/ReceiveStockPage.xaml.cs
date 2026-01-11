@@ -13,21 +13,19 @@ namespace BestFlex.Shell.Views.Pages.Inventory
 {
     public partial class ReceiveStockPage : UserControl
     {
-        private readonly IPurchaseReceiveHandler _handler;
+        private readonly ReceiveStockPageViewModel _vm;
         private readonly IGrnPrintEngine _printEngine;
-
-        private readonly ObservableCollection<LineVm> _lines = new();
-        private PurchaseReceiptResult? _lastResult;
 
         public ReceiveStockPage(IPurchaseReceiveHandler handler, IGrnPrintEngine printEngine)
         {
             InitializeComponent();
-            _handler = handler;
+            _vm = new ReceiveStockPageViewModel(handler);
             _printEngine = printEngine;
 
-            grid.ItemsSource = _lines;
+            grid.ItemsSource = _vm.Lines;
 
-            btnAddRow.Click += (_, __) => AddBlankLine();
+            // UI-only event wiring
+            btnAddRow.Click += (_, __) => { _vm.AddBlankLine(); UpdateTotals(); };
             btnNew.Click += (_, __) => ResetForm();
             btnSave.Click += async (_, __) => await SaveAsync();
             btnPrint.Click += (_, __) => PreviewLast();
@@ -40,7 +38,7 @@ namespace BestFlex.Shell.Views.Pages.Inventory
                 if (w != null) w.PreviewKeyDown += HandleKeys;
             };
 
-            AddBlankLine();
+            _vm.AddBlankLine();
             UpdateTotals();
         }
 
@@ -65,68 +63,37 @@ namespace BestFlex.Shell.Views.Pages.Inventory
 
         private void AddBlankLine()
         {
-            var vm = new LineVm();
-            vm.PropertyChanged += (_, __) => UpdateTotals();
-            _lines.Add(vm);
+            _vm.AddBlankLine();
             UpdateTotals();
-            grid.ScrollIntoView(vm);
+            grid.ScrollIntoView(_vm.Lines.LastOrDefault());
         }
 
         private void RemoveLine_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is Button { DataContext: LineVm vm })
+            if (sender is Button { DataContext: ReceiveStockPageViewModel.LineVm vm })
             {
-                _lines.Remove(vm);
+                _vm.RemoveLine(vm);
                 UpdateTotals();
             }
         }
 
         private void UpdateTotals()
         {
-            var total = _lines.Sum(l => l.LineTotal);
+            var total = _vm.ComputeTotal();
             txtGrand.Text = total.ToString("0.###");
-            txtSummary.Text = $"{_lines.Count} line(s)";
+            txtSummary.Text = $"{_vm.Lines.Count} line(s)";
         }
 
         private async System.Threading.Tasks.Task SaveAsync()
         {
-            if (string.IsNullOrWhiteSpace(txtSupplier.Text))
-            {
-                MessageBox.Show("Supplier is required.", "BestFlex", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-            if (string.IsNullOrWhiteSpace(txtDocNo.Text))
-            {
-                MessageBox.Show("Document No is required.", "BestFlex", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-            var date = dpDate.SelectedDate ?? DateTime.Today;
-
-            var lines = _lines
-                .Where(l => !string.IsNullOrWhiteSpace(l.Code) && l.Quantity > 0)
-                .Select(l => new ReceiveLine(l.Code!.Trim(), l.Name?.Trim(), l.Quantity, l.UnitCost))
-                .ToList();
-
-            if (lines.Count == 0)
-            {
-                MessageBox.Show("Add at least one valid line.", "BestFlex", MessageBoxButton.OK, MessageBoxImage.Information);
-                return;
-            }
-
-            var draft = new ReceiveDraft(
-                Supplier: txtSupplier.Text.Trim(),
-                DocumentNumber: txtDocNo.Text.Trim(),
-                Date: date,
-                Lines: lines,
-                Notes: string.IsNullOrWhiteSpace(txtNotes.Text) ? null : txtNotes.Text.Trim()
-            );
-
             try
             {
-                _lastResult = await _handler.ReceiveAsync(draft);
+                var date = dpDate.SelectedDate ?? DateTime.Today;
+                var (draft, result) = await _vm.SaveAsync(txtSupplier.Text, txtDocNo.Text, date, txtNotes.Text);
+
                 btnPrint.IsEnabled = true;
 
-                var doc = _printEngine.CreateGrnDocument(draft, _lastResult);
+                var doc = _printEngine.CreateGrnDocument(draft, result);
                 var owner = Window.GetWindow(this) ?? System.Windows.Application.Current?.MainWindow;
                 var wnd = new GrnPreviewWindow { Owner = owner };
                 wnd.SetDocument(doc);
@@ -136,6 +103,10 @@ namespace BestFlex.Shell.Views.Pages.Inventory
                 ResetForm();
                 txtSupplier.Text = keepSupplier;
             }
+            catch (InvalidOperationException ex)
+            {
+                MessageBox.Show(ex.Message, "BestFlex", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
             catch (Exception ex)
             {
                 MessageBox.Show($"Failed to save GRN.\n{ex.Message}", "BestFlex", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -144,13 +115,14 @@ namespace BestFlex.Shell.Views.Pages.Inventory
 
         private void PreviewLast()
         {
-            if (_lastResult == null)
+            if (_vm.LastResult == null)
             {
                 MessageBox.Show("No GRN to preview yet.", "BestFlex", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
-            var lines = _lines
+            // Build a draft from current UI values for preview (presentation only)
+            var lines = _vm.Lines
                 .Where(l => !string.IsNullOrWhiteSpace(l.Code) && l.Quantity > 0)
                 .Select(l => new ReceiveLine(l.Code!.Trim(), l.Name?.Trim(), l.Quantity, l.UnitCost))
                 .ToList();
@@ -163,7 +135,7 @@ namespace BestFlex.Shell.Views.Pages.Inventory
                 Notes: string.IsNullOrWhiteSpace(txtNotes.Text) ? null : txtNotes.Text.Trim()
             );
 
-            var doc = _printEngine.CreateGrnDocument(draft, _lastResult);
+            var doc = _printEngine.CreateGrnDocument(draft, _vm.LastResult);
             var owner = Window.GetWindow(this) ?? System.Windows.Application.Current?.MainWindow;
             var wnd = new Windows.GrnPreviewWindow { Owner = owner };
             wnd.SetDocument(doc);
@@ -173,8 +145,7 @@ namespace BestFlex.Shell.Views.Pages.Inventory
         // ✅ Missing method (caused CS0103) — restored
         private void ResetForm()
         {
-            _lines.Clear();
-            _lastResult = null;
+            _vm.Reset();
             txtDocNo.Text = "";
             txtNotes.Text = "";
             dpDate.SelectedDate = DateTime.Today;
@@ -182,23 +153,6 @@ namespace BestFlex.Shell.Views.Pages.Inventory
             AddBlankLine();
             UpdateTotals();
         }
-
-        public sealed class LineVm : INotifyPropertyChanged
-        {
-            private string? _code;
-            private string? _name;
-            private decimal _qty;
-            private decimal _unitCost;
-
-            public string? Code { get => _code; set { _code = value; OnChanged(nameof(Code)); OnChanged(nameof(LineTotal)); } }
-            public string? Name { get => _name; set { _name = value; OnChanged(nameof(Name)); } }
-            public decimal Quantity { get => _qty; set { _qty = value; OnChanged(nameof(Quantity)); OnChanged(nameof(LineTotal)); } }
-            public decimal UnitCost { get => _unitCost; set { _unitCost = value; OnChanged(nameof(UnitCost)); OnChanged(nameof(LineTotal)); } }
-
-            public decimal LineTotal => Quantity * UnitCost;
-
-            public event PropertyChangedEventHandler? PropertyChanged;
-            private void OnChanged(string n) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
-        }
+        // LineVm is provided by ReceiveStockPageViewModel.LineVm
     }
 }

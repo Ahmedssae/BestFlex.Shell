@@ -104,63 +104,12 @@ namespace BestFlex.Shell
 
             try
             {
-                // subtotal/discount/tax/total
-                decimal subtotal = 0m;
-                foreach (var ln in _vm.Lines) subtotal += ln.LineTotal;
-
-                var p = _printOptions.CurrentValue;
-                decimal discountAmt = (p.ShowDiscount && p.DiscountPercent > 0)
-                    ? decimal.Round(subtotal * (decimal)p.DiscountPercent / 100m, 2)
-                    : 0m;
-                decimal taxableBase = subtotal - discountAmt;
-                decimal taxAmt = (p.ShowTax && p.TaxPercent > 0)
-                    ? decimal.Round(taxableBase * (decimal)p.TaxPercent / 100m, 2)
-                    : 0m;
-                decimal total = taxableBase + taxAmt;
-
-                var c = _companyOptions.CurrentValue;
-
-                var dto = new InvoicePrintData
-                {
-                    CompanyName = c.Name,
-                    CompanyAddress = c.Address,
-                    CompanyPhone = c.Phone,
-                    CompanyTaxNo = c.TaxNo,
-                    CompanyLogoPath = c.LogoPath,
-
-                    InvoiceNo = _vm.InvoiceNo ?? "",
-                    IssuedAt = _vm.IssuedAt,
-                    Currency = _vm.Currency ?? "USD",
-                    CustomerName = _vm.Customer ?? "",
-                    Issuer = _vm.Issuer ?? "",
-                    Description = _vm.Description,
-
-                    Subtotal = subtotal,
-                    Total = total,
-                    DiscountAmount = discountAmt,
-                    DiscountPercent = p.DiscountPercent,
-                    TaxAmount = taxAmt,
-                    TaxPercent = p.TaxPercent,
-
-                    PageSize = p.PageSize,
-                    Margin = p.Margin,
-                    ShowCode = p.ShowCode,
-                    ShowName = p.ShowName,
-                    ShowQty = p.ShowQty,
-                    ShowUnitPrice = p.ShowUnitPrice,
-                    ShowLineTotal = p.ShowLineTotal,
-                    FooterNote = p.FooterNote
-                };
-
-                foreach (var ln in _vm.Lines)
-                    dto.Lines.Add(new InvoicePrintLine
-                    {
-                        Code = ln.Code,
-                        Name = ln.Name,
-                        Qty = ln.Qty,
-                        UnitPrice = ln.UnitPrice,
-                        LineTotal = ln.LineTotal
-                    });
+                // Delegate subtotal/discount/tax/total calculation and DTO construction
+                // to the ViewModel. This keeps the window code-behind UI-focused and
+                // makes the business logic testable in the VM.
+                var companySettings = _companyOptions.CurrentValue;
+                var printSettings = _printOptions.CurrentValue;
+                var dto = _vm.PrepareInvoicePrintData(companySettings, printSettings);
 
                 var bytes = await _pdfExporter.RenderPdfAsync(dto);
                 File.WriteAllBytes(sfd.FileName, bytes);

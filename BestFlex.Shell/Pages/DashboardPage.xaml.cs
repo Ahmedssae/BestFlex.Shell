@@ -17,10 +17,7 @@ namespace BestFlex.Shell.Pages
 {
     public partial class DashboardPage : UserControl, INotifyPropertyChanged
     {
-        // Low stock
-        public ObservableCollection<InventoryReadService.LowStockDto> LowStock { get; } = new();
-        // Debt / Unpaid
-        public ObservableCollection<SalesReadService.CustomerOutstandingDto> TopDebt { get; } = new();
+        private readonly DashboardPageViewModel _vm;
 
         // Theme label text bound from XAML
         private string _themeText = "Light";
@@ -33,10 +30,11 @@ namespace BestFlex.Shell.Pages
         public DashboardPage()
         {
             InitializeComponent();
-            gridLow.ItemsSource = LowStock;
-            gridDebt.ItemsSource = TopDebt;
+            _vm = new DashboardPageViewModel(((App)System.Windows.Application.Current).Services);
+            gridLow.ItemsSource = _vm.LowStock;
+            gridDebt.ItemsSource = _vm.TopDebt;
 
-            // Make bindings on this page work without extra ViewModel
+            // Keep DataContext for theme binding
             DataContext = this;
 
             ThemeText = UserPrefs.Current.Theme == "Dark" ? "Dark" : "Light";
@@ -59,18 +57,8 @@ namespace BestFlex.Shell.Pages
         {
             try
             {
-                var sp = ((App)System.Windows.Application.Current).Services;
-                using var scope = sp.CreateScope();
-                var db = scope.ServiceProvider.GetRequiredService<BestFlexDbContext>();
-                var svc = new InventoryReadService(db);
-
-                var list = await svc.GetLowStockAsync(LowThreshold, LowTopN, ct);
-                var total = await svc.CountLowStockAsync(LowThreshold, ct);
-
-                LowStock.Clear();
-                foreach (var row in list) LowStock.Add(row);
-
-                txtLowSummary.Text = $"Showing {LowStock.Count} of {total} items with stock ≤ {LowThreshold}.";
+                await _vm.ReloadLowAsync(LowThreshold, LowTopN, ct);
+                txtLowSummary.Text = _vm.LowSummary;
             }
             catch (Exception ex)
             {
@@ -86,18 +74,8 @@ namespace BestFlex.Shell.Pages
         {
             try
             {
-                var sp = ((App)System.Windows.Application.Current).Services;
-                using var scope = sp.CreateScope();
-                var db = scope.ServiceProvider.GetRequiredService<BestFlexDbContext>();
-                var svc = new SalesReadService(db);
-
-                var list = await svc.GetTopOutstandingAsync(DebtTopN, ct);
-
-                TopDebt.Clear();
-                foreach (var row in list) TopDebt.Add(row);
-
-                var totalAmount = TopDebt.Sum(x => x.Amount);
-                txtDebtSummary.Text = $"Showing top {TopDebt.Count} customers · Total amount: {totalAmount:N2}";
+                await _vm.ReloadDebtAsync(DebtTopN, ct);
+                txtDebtSummary.Text = _vm.DebtSummary;
             }
             catch (Exception ex)
             {
@@ -111,8 +89,9 @@ namespace BestFlex.Shell.Pages
 
         private async Task ReloadAllAsync()
         {
-            await ReloadLowAsync();
-            await ReloadDebtAsync();
+            await _vm.ReloadAllAsync(LowThreshold, LowTopN, DebtTopN);
+            txtLowSummary.Text = _vm.LowSummary;
+            txtDebtSummary.Text = _vm.DebtSummary;
         }
 
         // Events

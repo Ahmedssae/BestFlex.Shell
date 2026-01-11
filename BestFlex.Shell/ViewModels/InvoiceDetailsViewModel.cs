@@ -5,6 +5,8 @@ using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using BestFlex.Persistence.Data;
 using Microsoft.EntityFrameworkCore;
+using BestFlex.Application.Abstractions;
+using BestFlex.Shell; // for CompanySettings/PrintTemplateSettings types if needed via root namespace
 
 namespace BestFlex.Shell.ViewModels
 {
@@ -103,6 +105,76 @@ namespace BestFlex.Shell.ViewModels
             public decimal Qty { get; set; }
             public decimal UnitPrice { get; set; }
             public decimal LineTotal { get; set; }
+        }
+
+        /// <summary>
+        /// Prepare an InvoicePrintData DTO for printing/export. This moves the
+        /// subtotal/discount/tax/total calculations out of the Window code-behind
+        /// so the VM contains business logic and is testable.
+        /// </summary>
+        public InvoicePrintData PrepareInvoicePrintData(BestFlex.Application.Abstractions.CompanySettings company, BestFlex.Application.Abstractions.PrintTemplateSettings template)
+        {
+            // compute subtotal from lines (ensure consistent rounding rules)
+            decimal subtotal = 0m;
+            foreach (var ln in Lines) subtotal += ln.LineTotal;
+
+            decimal discountAmt = 0m;
+            if (template.ShowDiscount && template.DiscountPercent > 0)
+                discountAmt = decimal.Round(subtotal * (decimal)template.DiscountPercent / 100m, 2);
+
+            decimal taxableBase = subtotal - discountAmt;
+
+            decimal taxAmt = 0m;
+            if (template.ShowTax && template.TaxPercent > 0)
+                taxAmt = decimal.Round(taxableBase * (decimal)template.TaxPercent / 100m, 2);
+
+            decimal total = taxableBase + taxAmt;
+
+            var dto = new InvoicePrintData
+            {
+                CompanyName = company?.Name ?? "",
+                CompanyAddress = company?.Address ?? "",
+                CompanyPhone = company?.Phone ?? "",
+                CompanyTaxNo = company?.TaxNo ?? "",
+                CompanyLogoPath = company?.LogoPath,
+
+                InvoiceNo = InvoiceNo ?? "",
+                IssuedAt = IssuedAt,
+                Currency = Currency ?? "USD",
+                CustomerName = Customer ?? "",
+                Issuer = Issuer ?? "",
+                Description = Description,
+
+                Subtotal = subtotal,
+                Total = total,
+                DiscountAmount = discountAmt,
+                DiscountPercent = template.DiscountPercent,
+                TaxAmount = taxAmt,
+                TaxPercent = template.TaxPercent,
+
+                PageSize = template.PageSize,
+                Margin = template.Margin,
+                ShowCode = template.ShowCode,
+                ShowName = template.ShowName,
+                ShowQty = template.ShowQty,
+                ShowUnitPrice = template.ShowUnitPrice,
+                ShowLineTotal = template.ShowLineTotal,
+                FooterNote = template.FooterNote
+            };
+
+            foreach (var ln in Lines)
+            {
+                dto.Lines.Add(new InvoicePrintLine
+                {
+                    Code = ln.Code,
+                    Name = ln.Name,
+                    Qty = ln.Qty,
+                    UnitPrice = ln.UnitPrice,
+                    LineTotal = ln.LineTotal
+                });
+            }
+
+            return dto;
         }
     }
 }

@@ -16,6 +16,8 @@ using Microsoft.Extensions.Hosting;
 using System;
 using System.IO;
 using System.Linq;
+using BestFlex.Domain.Entities;
+using BCryptNet = BCrypt.Net.BCrypt;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
@@ -105,6 +107,9 @@ namespace BestFlex.Shell
             // Ensure DB migrations
             TryMigrateDatabase(Services);
 
+            // Ensure at least one user exists (convenience for first-run)
+            EnsureDefaultUserExists(Services);
+
             // Routes
             var nav = Services.GetRequiredService<INavigator>();
             nav.Register("app://core/dashboard", () => Services.GetRequiredService<DashboardPage>());
@@ -142,6 +147,32 @@ namespace BestFlex.Shell
                 db.Database.Migrate();
             }
             catch { }
+        }
+
+        private static void EnsureDefaultUserExists(IServiceProvider sp)
+        {
+            try
+            {
+                using var scope = sp.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<BestFlexDbContext>();
+
+                // If any user exists, do nothing
+                if (db.Users.Any()) return;
+
+                // Create a default admin user (username: admin, password: admin)
+                var user = new Users
+                {
+                    Id = Guid.NewGuid(),
+                    Username = "admin",
+                    DisplayName = "Administrator",
+                    PasswordHash = BCryptNet.HashPassword("admin"),
+                    RolesCsv = "Admin",
+                    CreatedAtUtc = DateTime.UtcNow
+                };
+                db.Users.Add(user);
+                db.SaveChanges();
+            }
+            catch { /* ignore failures */ }
         }
 
         private static void RegisterInvoiceEngine(IServiceCollection services)

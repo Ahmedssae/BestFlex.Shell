@@ -16,12 +16,13 @@ namespace BestFlex.Shell.Pages
 {
     public partial class CustomerStatementsPage : UserControl
     {
-        private readonly List<Row> _rows = new();
+        private readonly CustomerStatementsViewModel _vm;
 
         public CustomerStatementsPage()
         {
             InitializeComponent();
-            grid.ItemsSource = _rows;
+            _vm = new CustomerStatementsViewModel(((App)System.Windows.Application.Current).Services);
+            grid.ItemsSource = _vm.Rows;
         }
 
         private async void UserControl_Loaded(object sender, RoutedEventArgs e)
@@ -29,39 +30,11 @@ namespace BestFlex.Shell.Pages
             dpFrom.SelectedDate = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
             dpTo.SelectedDate = DateTime.Today;
 
-            await LoadCustomersAsync();
+            await _vm.LoadCustomersAsync();
+            cmbCustomer.ItemsSource = _vm.Customers;
         }
 
-        private async Task LoadCustomersAsync()
-        {
-            try
-            {
-                ShowOverlay(true);
-
-                var sp = ((App)System.Windows.Application.Current).Services;
-                using var scope = sp.CreateScope();
-                var db = scope.ServiceProvider.GetRequiredService<BestFlexDbContext>();
-
-                var customers = await db.CustomerAccounts
-                    .AsNoTracking()
-                    .OrderBy(c => c.Name)
-                    .Select(c => new { c.Id, c.Name })
-                    .ToListAsync();
-
-                cmbCustomer.ItemsSource = customers;
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(Window.GetWindow(this)!,
-                    $"Failed to load customers.\n\n{ex.Message}",
-                    "Customer Statements",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-            finally
-            {
-                ShowOverlay(false);
-            }
-        }
+        
 
         // ----- UI actions -----
         private async void BtnLoad_Click(object sender, RoutedEventArgs e)
@@ -74,7 +47,7 @@ namespace BestFlex.Shell.Pages
             cmbCustomer.SelectedIndex = -1;
             dpFrom.SelectedDate = null;
             dpTo.SelectedDate = null;
-            _rows.Clear();
+            _vm.Rows.Clear();
             grid.Items.Refresh();
             txtTotalDebit.Text = txtTotalCredit.Text = txtClosing.Text = "";
             await Task.CompletedTask;
@@ -82,7 +55,7 @@ namespace BestFlex.Shell.Pages
 
         private void BtnExport_Click(object sender, RoutedEventArgs e)
         {
-            var cols = new (string, Func<Row, object?>)[]
+            var cols = new (string, Func<CustomerStatementsViewModel.Row, object?>)[]
             {
                 ("Date",    r => r.Date.ToString("yyyy-MM-dd")),
                 ("DocNo",   r => r.DocNo),
@@ -92,7 +65,7 @@ namespace BestFlex.Shell.Pages
                 ("Balance", r => r.Balance),
                 ("Notes",   r => r.Notes),
             };
-            CsvExporter.Export(_rows, cols, "customer-statement.csv");
+            CsvExporter.Export(_vm.Rows, cols, "customer-statement.csv");
         }
 
         private void BtnPrint_Click(object sender, RoutedEventArgs e)
@@ -120,7 +93,7 @@ namespace BestFlex.Shell.Pages
             };
             if (wnd.ShowDialog() == true)
             {
-                _ = LoadCustomersAsync().ContinueWith(_ =>
+                _ = _vm.LoadCustomersAsync().ContinueWith(_ =>
                 {
                     Dispatcher.Invoke(() =>
                     {
@@ -136,82 +109,27 @@ namespace BestFlex.Shell.Pages
         // ----- Core loading (SQLite-safe) -----
         private async Task LoadAsync()
         {
+            if (cmbCustomer.SelectedValue == null)
+            {
+                MessageBox.Show(Window.GetWindow(this)!, "Please select a customer.", "Customer Statements",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            ShowOverlay(true);
             try
             {
-                if (cmbCustomer.SelectedValue == null)
-                {
-                    MessageBox.Show(Window.GetWindow(this)!, "Please select a customer.", "Customer Statements",
-                        MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-                }
-
-                ShowOverlay(true);
-
                 var customerId = (int)cmbCustomer.SelectedValue;
                 var from = dpFrom.SelectedDate?.Date;
                 var to = dpTo.SelectedDate?.Date;
 
-                var sp = ((App)System.Windows.Application.Current).Services;
-                using var scope = sp.CreateScope();
-                var db = scope.ServiceProvider.GetRequiredService<BestFlexDbContext>();
-
-                // 1) Fetch invoice headers for the customer and date filter
-                var invHeadersQuery = db.SellingInvoices.AsNoTracking()
-                    .Where(i => i.CustomerAccountId == customerId);
-
-                if (from.HasValue) invHeadersQuery = invHeadersQuery.Where(i => i.IssuedAt >= from.Value);
-                if (to.HasValue) invHeadersQuery = invHeadersQuery.Where(i => i.IssuedAt <= to.Value.AddDays(1).AddTicks(-1));
-
-                var invHeaders = await invHeadersQuery
-                    .Select(i => new { i.Id, i.InvoiceNo, i.IssuedAt, i.Description })
-                    .OrderBy(i => i.IssuedAt)
-                    .ToListAsync();
-
-                // 2) Bring invoice items for the selected invoice ids, then sum lines IN MEMORY (SQLite-safe)
-                var ids = invHeaders.Select(h => h.Id).ToList();
-                var lineItems = await db.SellingInvoiceItems
-                    .AsNoTracking()
-                    .Where(it => ids.Contains(it.SellingInvoiceId))
-                    .Select(it => new { it.SellingInvoiceId, it.Quantity, it.UnitPrice })
-                    .ToListAsync();
-
-                var amountByInvoiceId = lineItems
-                    .GroupBy(x => x.SellingInvoiceId)
-                    .ToDictionary(
-                        g => g.Key,
-                        g => g.Aggregate(0m, (sum, x) => sum + (x.Quantity * x.UnitPrice)));
-
-                // 3) Build rows + running balance
-                _rows.Clear();
-                decimal balance = 0m;
-                decimal totalDebit = 0m, totalCredit = 0m;
-
-                foreach (var h in invHeaders)
-                {
-                    var amount = amountByInvoiceId.TryGetValue(h.Id, out var v) ? v : 0m;
-
-                    var r = new Row
-                    {
-                        Date = h.IssuedAt.Date,
-                        DocNo = h.InvoiceNo,
-                        Type = "Invoice",
-                        Debit = amount,            // invoices raise debit
-                        Credit = 0m,
-                        Notes = h.Description
-                    };
-                    balance += r.Debit - r.Credit;
-                    r.Balance = balance;
-
-                    totalDebit += r.Debit;
-                    totalCredit += r.Credit;
-                    _rows.Add(r);
-                }
+                await _vm.LoadAsync(customerId, from, to);
 
                 grid.Items.Refresh();
 
-                txtTotalDebit.Text = totalDebit.ToString("N2", CultureInfo.InvariantCulture);
-                txtTotalCredit.Text = totalCredit.ToString("N2", CultureInfo.InvariantCulture);
-                txtClosing.Text = balance.ToString("N2", CultureInfo.InvariantCulture);
+                txtTotalDebit.Text = _vm.TotalDebit.ToString("N2", CultureInfo.InvariantCulture);
+                txtTotalCredit.Text = _vm.TotalCredit.ToString("N2", CultureInfo.InvariantCulture);
+                txtClosing.Text = _vm.Closing.ToString("N2", CultureInfo.InvariantCulture);
             }
             catch (Exception ex)
             {
@@ -279,7 +197,7 @@ namespace BestFlex.Shell.Pages
             var body = new TableRowGroup();
             table.RowGroups.Add(body);
 
-            foreach (var r in _rows)
+            foreach (var r in _vm.Rows)
             {
                 var tr = new TableRow();
                 body.Rows.Add(tr);
@@ -297,9 +215,9 @@ namespace BestFlex.Shell.Pages
                 C(r.Notes);
             }
 
-            var totDebit = _rows.Sum(x => x.Debit);
-            var totCredit = _rows.Sum(x => x.Credit);
-            var closing = _rows.LastOrDefault()?.Balance ?? 0m;
+            var totDebit = _vm.Rows.Sum(x => x.Debit);
+            var totCredit = _vm.Rows.Sum(x => x.Credit);
+            var closing = _vm.Rows.LastOrDefault()?.Balance ?? 0m;
 
             doc.Blocks.Add(new Paragraph(new Run(
                 $"Total Debit: {totDebit:N2}   •   Total Credit: {totCredit:N2}   •   Closing: {closing:N2}"))
@@ -314,15 +232,6 @@ namespace BestFlex.Shell.Pages
             overlay.IsHitTestVisible = on;
         }
 
-        private sealed class Row
-        {
-            public DateTime Date { get; set; }
-            public string DocNo { get; set; } = "";
-            public string Type { get; set; } = "";
-            public decimal Debit { get; set; }
-            public decimal Credit { get; set; }
-            public decimal Balance { get; set; }
-            public string Notes { get; set; } = "";
-        }
+        // Row type is provided by CustomerStatementsViewModel.Row
     }
 }

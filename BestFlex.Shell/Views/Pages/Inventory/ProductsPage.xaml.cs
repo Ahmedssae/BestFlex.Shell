@@ -17,23 +17,16 @@ namespace BestFlex.Shell.Views.Pages.Inventory
 {
     public partial class ProductsPage : UserControl
     {
-        private readonly ObservableCollection<ProductRow> _rows = new();
-        private int _page = 0;
-        private int _pageSize = 25;
-        private int _total = 0;
+        private readonly ProductsPageViewModel _vm;
 
         public ProductsPage()
         {
             InitializeComponent();
-            grid.ItemsSource = _rows;
+            _vm = new ProductsPageViewModel(((App)System.Windows.Application.Current).Services);
+            grid.ItemsSource = _vm.Rows;
         }
 
-        private sealed record ProductRow(
-            int Id,
-            string Code,
-            string Name,
-            decimal StockQty
-        );
+        // ProductRow is now declared in ProductsPageViewModel.ProductRow
 
         private static int? ParseIntNullable(string? s)
         {
@@ -66,18 +59,13 @@ namespace BestFlex.Shell.Views.Pages.Inventory
                 var stockMax = ParseIntNullable(txtStockMax.Text);
                 if (stockMax.HasValue) q = q.Where(p => p.StockQty <= stockMax.Value);
 
-                _total = await q.CountAsync(ct);
+                // Copy UI filters into VM and delegate load
+                _vm.CodeFilter = (txtCode.Text ?? "").Trim();
+                _vm.NameFilter = (txtName.Text ?? "").Trim();
+                _vm.StockMin = stockMin;
+                _vm.StockMax = stockMax;
 
-                var pageRows = await q
-                    .OrderBy(p => p.Code)
-                    .Skip(_page * _pageSize)
-                    .Take(_pageSize)
-                    .ToListAsync(ct);
-
-                _rows.Clear();
-                foreach (var r in pageRows)
-                    _rows.Add(new ProductRow(r.Id, r.Code, r.Name, r.StockQty));
-
+                await _vm.LoadAsync(ct);
                 UpdateRangeText();
             }
             catch (Exception ex)
@@ -98,9 +86,9 @@ namespace BestFlex.Shell.Views.Pages.Inventory
 
         private void UpdateRangeText()
         {
-            var from = _total == 0 ? 0 : (_page * _pageSize) + 1;
-            var to = Math.Min((_page + 1) * _pageSize, _total);
-            txtRange.Text = $"Showing {from}-{to} of {_total}";
+            var from = _vm.Total == 0 ? 0 : (_vm.Page * _vm.PageSize) + 1;
+            var to = Math.Min((_vm.Page + 1) * _vm.PageSize, _vm.Total);
+            txtRange.Text = $"Showing {from}-{to} of {_vm.Total}";
         }
 
         private void ShowOverlay(bool on)
@@ -112,18 +100,18 @@ namespace BestFlex.Shell.Views.Pages.Inventory
         // Events
         private async void UserControl_Loaded(object sender, RoutedEventArgs e)
         {
-            _pageSize = Math.Max(1, UserPrefs.Current.InvoicePageSize); // reuse persisted page size
+            _vm.PageSize = Math.Max(1, UserPrefs.Current.InvoicePageSize); // reuse persisted page size
             var sizes = new[] { 25, 50, 100 };
-            var idx = Array.IndexOf(sizes, _pageSize);
+            var idx = Array.IndexOf(sizes, _vm.PageSize);
             cmbPageSize.SelectedIndex = idx >= 0 ? idx : 0;
-            if (idx < 0) _pageSize = sizes[0];
+            if (idx < 0) _vm.PageSize = sizes[0];
 
             await LoadAsync();
         }
 
         private async void BtnSearch_Click(object sender, RoutedEventArgs e)
         {
-            _page = 0;
+            _vm.Page = 0;
             await LoadAsync();
         }
 
@@ -133,25 +121,25 @@ namespace BestFlex.Shell.Views.Pages.Inventory
             txtName.Text = string.Empty;
             txtStockMin.Text = string.Empty;
             txtStockMax.Text = string.Empty;
-            _page = 0;
+            _vm.Page = 0;
             await LoadAsync();
         }
 
         private async void BtnPrev_Click(object sender, RoutedEventArgs e)
         {
-            if (_page > 0)
+            if (_vm.Page > 0)
             {
-                _page--;
+                _vm.Page--;
                 await LoadAsync();
             }
         }
 
         private async void BtnNext_Click(object sender, RoutedEventArgs e)
         {
-            var maxPage = (_total == 0) ? 0 : (_total - 1) / _pageSize;
-            if (_page < maxPage)
+            var maxPage = (_vm.Total == 0) ? 0 : (_vm.Total - 1) / _vm.PageSize;
+            if (_vm.Page < maxPage)
             {
-                _page++;
+                _vm.Page++;
                 await LoadAsync();
             }
         }
@@ -164,9 +152,9 @@ namespace BestFlex.Shell.Views.Pages.Inventory
                 int.TryParse(it.Content?.ToString(), out var sz) &&
                 sz > 0)
             {
-                _pageSize = sz;
-                _page = 0;
-                UserPrefs.Current.InvoicePageSize = _pageSize;
+                _vm.PageSize = sz;
+                _vm.Page = 0;
+                UserPrefs.Current.InvoicePageSize = _vm.PageSize;
                 UserPrefs.Save();
                 await LoadAsync();
             }
@@ -186,13 +174,13 @@ namespace BestFlex.Shell.Views.Pages.Inventory
 
         private void BtnExportCsv_Click(object sender, RoutedEventArgs e)
         {
-            var cols = new (string, Func<ProductRow, object?>)[]
+            var cols = new (string, Func<ProductsPageViewModel.ProductRow, object?>)[]
             {
                 ("Code", r => r.Code),
                 ("Name", r => r.Name),
                 ("StockQty", r => r.StockQty)
             };
-            CsvExporter.Export(_rows, cols, "products.csv");
+            CsvExporter.Export<ProductsPageViewModel.ProductRow>(_vm.Rows, cols, "products.csv");
         }
 
         private void BtnPrint_Click(object sender, RoutedEventArgs e)
@@ -256,7 +244,7 @@ namespace BestFlex.Shell.Views.Pages.Inventory
             var body = new TableRowGroup();
             table.RowGroups.Add(body);
 
-            foreach (var r in _rows)
+            foreach (var r in _vm.Rows)
             {
                 var tr = new TableRow();
                 body.Rows.Add(tr);
@@ -270,7 +258,7 @@ namespace BestFlex.Shell.Views.Pages.Inventory
                 C(string.Format(CultureInfo.InvariantCulture, "{0}", r.StockQty), TextAlignment.Right);
             }
 
-            var total = _rows.Sum(x => x.StockQty);
+            var total = _vm.Rows.Sum(x => x.StockQty);
             var totals = new Paragraph(new Run($"Total stock (listed page): {total:N2}"))
             {
                 Margin = new Thickness(0, 8, 0, 0),

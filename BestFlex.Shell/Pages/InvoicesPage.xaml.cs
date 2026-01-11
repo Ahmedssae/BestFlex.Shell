@@ -15,93 +15,33 @@ namespace BestFlex.Shell.Pages
 {
     public partial class InvoicesPage : UserControl
     {
-        private readonly ObservableCollection<InvoiceRow> _rows = new();
-        private int _page = 0;                // zero-based
-        private int _pageSize = 25;           // persisted
-        private int _total = 0;
+        // Use a dedicated ViewModel for data access and paging logic. The code-behind
+        // remains responsible for UI wiring (events, print/export) only.
+        private readonly InvoicesPageViewModel _vm;
 
         public InvoicesPage()
         {
             InitializeComponent();
-            grid.ItemsSource = _rows;
+            _vm = new InvoicesPageViewModel(((App)System.Windows.Application.Current).Services);
+            grid.ItemsSource = _vm.Rows;
         }
-
-        private sealed record InvoiceRow(
-            int Id,
-            string InvoiceNo,
-            DateTime IssuedAt,
-            string CustomerName,
-            int Items,
-            decimal Amount,
-            string Currency
-        );
 
         private async System.Threading.Tasks.Task LoadAsync(System.Threading.CancellationToken ct = default)
         {
             ShowOverlay(true);
-
             try
             {
-                var sp = ((App)System.Windows.Application.Current).Services;
-                using var scope = sp.CreateScope();
-                var db = scope.ServiceProvider.GetRequiredService<BestFlexDbContext>();
+                // Copy UI filters into VM
+                _vm.NumberFilter = (txtNumber.Text ?? "").Trim();
+                _vm.CustomerFilter = (txtCustomer.Text ?? "").Trim();
+                _vm.From = dpFrom.SelectedDate?.Date;
+                _vm.To = dpTo.SelectedDate?.Date;
 
-                var q =
-                    from inv in db.SellingInvoices.AsNoTracking()
-                    join ca in db.CustomerAccounts.AsNoTracking() on inv.CustomerAccountId equals ca.Id
-                    select new { inv, ca };
+                // Page settings
+                _vm.Page = _vm.Page; // preserved by UI actions
+                _vm.PageSize = _vm.PageSize; // persisted separately via UI
 
-                var num = (txtNumber.Text ?? "").Trim();
-                if (!string.IsNullOrEmpty(num))
-                    q = q.Where(x => x.inv.InvoiceNo.Contains(num));
-
-                var cust = (txtCustomer.Text ?? "").Trim();
-                if (!string.IsNullOrEmpty(cust))
-                    q = q.Where(x => EF.Functions.Like(x.ca.Name, $"%{cust}%"));
-
-                if (dpFrom.SelectedDate.HasValue)
-                {
-                    var from = dpFrom.SelectedDate.Value.Date;
-                    q = q.Where(x => x.inv.IssuedAt >= from);
-                }
-                if (dpTo.SelectedDate.HasValue)
-                {
-                    var to = dpTo.SelectedDate.Value.Date.AddDays(1).AddTicks(-1);
-                    q = q.Where(x => x.inv.IssuedAt <= to);
-                }
-
-                _total = await q.CountAsync(ct);
-
-                var pageQuery = q
-                    .OrderByDescending(x => x.inv.IssuedAt)
-                    .Skip(_page * _pageSize)
-                    .Take(_pageSize)
-                    .Select(x => new
-                    {
-                        x.inv.Id,
-                        x.inv.InvoiceNo,
-                        x.inv.IssuedAt,
-                        CustomerName = x.ca.Name,
-                        Currency = x.inv.Currency,
-                        Items = db.SellingInvoiceItems.Count(i => i.SellingInvoiceId == x.inv.Id),
-                        AmountDouble = db.SellingInvoiceItems
-                            .Where(i => i.SellingInvoiceId == x.inv.Id)
-                            .Sum(i => (double)(i.Quantity * i.UnitPrice))
-                    });
-
-                var rows = (await pageQuery.ToListAsync(ct))
-                    .Select(r => new InvoiceRow(
-                        r.Id,
-                        r.InvoiceNo,
-                        r.IssuedAt,
-                        r.CustomerName,
-                        r.Items,
-                        (decimal)r.AmountDouble,
-                        r.Currency ?? "USD"))
-                    .ToList();
-
-                _rows.Clear();
-                foreach (var r in rows) _rows.Add(r);
+                await _vm.LoadAsync(ct);
 
                 UpdateRangeText();
             }
@@ -121,9 +61,10 @@ namespace BestFlex.Shell.Pages
 
         private void UpdateRangeText()
         {
-            var from = _total == 0 ? 0 : (_page * _pageSize) + 1;
-            var to = Math.Min((_page + 1) * _pageSize, _total);
-            txtRange.Text = $"Showing {from}-{to} of {_total}";
+            var total = _vm.Total;
+            var from = total == 0 ? 0 : (_vm.Page * _vm.PageSize) + 1;
+            var to = Math.Min((_vm.Page + 1) * _vm.PageSize, total);
+            txtRange.Text = $"Showing {from}-{to} of {total}";
         }
 
         private void ShowOverlay(bool on)
@@ -136,18 +77,18 @@ namespace BestFlex.Shell.Pages
 
         private async void UserControl_Loaded(object sender, RoutedEventArgs e)
         {
-            _pageSize = Math.Max(1, UserPrefs.Current.InvoicePageSize);
+            _vm.PageSize = Math.Max(1, UserPrefs.Current.InvoicePageSize);
             var sizes = new[] { 25, 50, 100 };
-            var idx = Array.IndexOf(sizes, _pageSize);
+            var idx = Array.IndexOf(sizes, _vm.PageSize);
             cmbPageSize.SelectedIndex = idx >= 0 ? idx : 0;
-            if (idx < 0) _pageSize = sizes[0];
+            if (idx < 0) _vm.PageSize = sizes[0];
 
             await LoadAsync();
         }
 
         private async void BtnSearch_Click(object sender, RoutedEventArgs e)
         {
-            _page = 0;
+            _vm.Page = 0;
             await LoadAsync();
         }
 
@@ -157,25 +98,25 @@ namespace BestFlex.Shell.Pages
             txtCustomer.Text = string.Empty;
             dpFrom.SelectedDate = null;
             dpTo.SelectedDate = null;
-            _page = 0;
+            _vm.Page = 0;
             await LoadAsync();
         }
 
         private async void BtnPrev_Click(object sender, RoutedEventArgs e)
         {
-            if (_page > 0)
+            if (_vm.Page > 0)
             {
-                _page--;
+                _vm.Page--;
                 await LoadAsync();
             }
         }
 
         private async void BtnNext_Click(object sender, RoutedEventArgs e)
         {
-            var maxPage = (_total == 0) ? 0 : (_total - 1) / _pageSize;
-            if (_page < maxPage)
+            var maxPage = (_vm.Total == 0) ? 0 : (_vm.Total - 1) / _vm.PageSize;
+            if (_vm.Page < maxPage)
             {
-                _page++;
+                _vm.Page++;
                 await LoadAsync();
             }
         }
@@ -188,10 +129,10 @@ namespace BestFlex.Shell.Pages
                 int.TryParse(it.Content?.ToString(), out var sz) &&
                 sz > 0)
             {
-                _pageSize = sz;
-                _page = 0;
+                _vm.PageSize = sz;
+                _vm.Page = 0;
 
-                UserPrefs.Current.InvoicePageSize = _pageSize;
+                UserPrefs.Current.InvoicePageSize = _vm.PageSize;
                 UserPrefs.Save();
 
                 await LoadAsync();
@@ -210,7 +151,7 @@ namespace BestFlex.Shell.Pages
                 ("Amount",    r => r.Amount),
                 ("Currency",  r => r.Currency)
             };
-            CsvExporter.Export(_rows, cols, "invoices.csv");
+            CsvExporter.Export(_vm.Rows, cols, "invoices.csv");
         }
 
         private void BtnPrint_Click(object sender, RoutedEventArgs e)
@@ -284,7 +225,7 @@ namespace BestFlex.Shell.Pages
             var body = new TableRowGroup();
             table.RowGroups.Add(body);
 
-            foreach (var r in _rows)
+            foreach (var r in _vm.Rows)
             {
                 var tr = new TableRow();
                 body.Rows.Add(tr);
@@ -301,7 +242,7 @@ namespace BestFlex.Shell.Pages
                 C(r.Currency);
             }
 
-            var tot = _rows.Sum(x => x.Amount);
+            var tot = _vm.Rows.Sum(x => x.Amount);
             var totalPara = new Paragraph(new Run($"Total (this page): {tot:N2}"))
             {
                 Margin = new Thickness(0, 8, 0, 0),
