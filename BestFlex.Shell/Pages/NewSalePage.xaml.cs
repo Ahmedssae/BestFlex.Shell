@@ -228,7 +228,7 @@ namespace BestFlex.Shell.Pages
         public int Id { get; set; }
         public string Code { get; set; } = "";
         public string Name { get; set; } = "";
-        public int StockQty { get; set; }
+        public decimal StockQty { get; set; }
         public decimal DefaultPrice { get; set; }
 
         public string Display => string.IsNullOrWhiteSpace(Code) ? Name : $"{Code} — {Name}";
@@ -241,7 +241,7 @@ namespace BestFlex.Shell.Pages
         private int _productId;
         private decimal _qty;
         private decimal _unitPrice;
-        private int _stockQty;
+        private decimal _stockQty;
         private string _productName = "";
         private string _productCode = "";
 
@@ -276,7 +276,7 @@ namespace BestFlex.Shell.Pages
         public string ProductName => _productName;
         public string ProductCode => _productCode;
 
-        public int StockQty
+        public decimal StockQty
         {
             get => _stockQty;
             private set { _stockQty = value; Raise(nameof(StockQty)); Raise(nameof(StockText)); }

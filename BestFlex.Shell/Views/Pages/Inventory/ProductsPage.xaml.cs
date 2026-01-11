@@ -32,7 +32,7 @@ namespace BestFlex.Shell.Views.Pages.Inventory
             int Id,
             string Code,
             string Name,
-            int StockQty
+            decimal StockQty
         );
 
         private static int? ParseIntNullable(string? s)
@@ -271,7 +271,7 @@ namespace BestFlex.Shell.Views.Pages.Inventory
             }
 
             var total = _rows.Sum(x => x.StockQty);
-            var totals = new Paragraph(new Run($"Total stock (listed page): {total:N0}"))
+            var totals = new Paragraph(new Run($"Total stock (listed page): {total:N2}"))
             {
                 Margin = new Thickness(0, 8, 0, 0),
                 FontWeight = FontWeights.SemiBold

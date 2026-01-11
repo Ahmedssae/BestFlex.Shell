@@ -31,7 +31,15 @@ namespace BestFlex.Shell.ViewModels
 
         private bool CanSave() => Lines.Any() && Lines.All(l => l.ProductId > 0 && l.Quantity > 0 && l.UnitPrice >= 0);
 
-        private async Task SaveAsync()
+        public async Task LoadAsync() => await Task.CompletedTask;
+
+        public async Task AddLineAsync()
+        {
+            Lines.Add(new SaleLineVm());
+            await Task.CompletedTask;
+        }
+
+        public async Task SaveAsync()
         {
             try
             {
