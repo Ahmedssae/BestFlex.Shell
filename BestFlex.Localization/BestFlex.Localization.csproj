@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<!-- make sure there is NO <UseWPF>true</UseWPF> here -->
+	</PropertyGroup>
+	<ItemGroup>
+	  <PackageReference Include="System.Text.Json" Version="8.0.5" />
+	</ItemGroup>
+</Project>

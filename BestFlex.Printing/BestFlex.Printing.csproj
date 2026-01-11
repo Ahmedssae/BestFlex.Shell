@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<!-- make sure there is NO <UseWPF>true</UseWPF> here -->
+		<Nullable>enable</Nullable>
+
+	</PropertyGroup>
+	<ItemGroup>
+	  <PackageReference Include="QuestPDF" Version="2024.6.0" />
+	</ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BestFlex.Application\BestFlex.Application.csproj" />
+    <ProjectReference Include="..\BestFlex.Domain\BestFlex.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

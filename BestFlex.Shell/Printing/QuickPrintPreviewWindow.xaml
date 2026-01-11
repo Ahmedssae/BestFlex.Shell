@@ -1,0 +1,14 @@
+﻿<Window x:Class="BestFlex.Shell.Printing.QuickPrintPreviewWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Print Preview" Height="700" Width="900"
+        WindowStartupLocation="CenterOwner">
+    <DockPanel>
+        <ToolBar DockPanel.Dock="Top">
+            <Button Content="Print" Click="Print_Click" Padding="12,6" />
+            <Separator/>
+            <TextBlock Text="Use zoom controls on the viewer to inspect pages." Margin="8,0,0,0" Opacity="0.7"/>
+        </ToolBar>
+        <DocumentViewer x:Name="Viewer"/>
+    </DockPanel>
+</Window>

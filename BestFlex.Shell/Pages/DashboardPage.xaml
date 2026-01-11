@@ -1,0 +1,119 @@
+﻿<UserControl x:Class="BestFlex.Shell.Pages.DashboardPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Loaded="UserControl_Loaded">
+    <ScrollViewer>
+        <Grid Margin="12">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="12"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="12"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header with theme toggle -->
+            <DockPanel Grid.Row="0" LastChildFill="False">
+                <TextBlock Text="Dashboard" FontSize="20" FontWeight="SemiBold" />
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
+                    <TextBlock Text="Theme:" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                    <!-- Bind Content to ThemeText on the page (no named element required) -->
+                    <Button x:Name="btnTheme"
+                            Width="110" Height="28"
+                            Style="{StaticResource BtnSecondary}"
+                            Click="btnTheme_Click"
+                            Content="{Binding ThemeText, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                </StackPanel>
+            </DockPanel>
+
+            <!-- Low Stock card -->
+            <Border Grid.Row="2" Style="{StaticResource Card}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="8"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <DockPanel Grid.Row="0" LastChildFill="False">
+                        <TextBlock Text="Low Stock Alert" FontSize="16" FontWeight="SemiBold" />
+                        <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+                            <TextBlock Text="Threshold ≤" VerticalAlignment="Center" Margin="12,0,6,0"/>
+                            <TextBox x:Name="txtThreshold" Width="60" VerticalContentAlignment="Center" Text="5"/>
+
+                            <TextBlock Text="Top" VerticalAlignment="Center" Margin="12,0,6,0"/>
+                            <ComboBox x:Name="cmbTop" Width="70" SelectedIndex="1" Margin="0,0,8,0">
+                                <ComboBoxItem Content="5"/>
+                                <ComboBoxItem Content="10"/>
+                                <ComboBoxItem Content="20"/>
+                                <ComboBoxItem Content="50"/>
+                            </ComboBox>
+
+                            <Button Content="Refresh" Click="Refresh_Click" />
+                        </StackPanel>
+                    </DockPanel>
+
+                    <Separator Grid.Row="1"/>
+
+                    <DataGrid Grid.Row="2" x:Name="gridLow" AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True"
+                              HeadersVisibility="Column" RowHeight="34" GridLinesVisibility="Horizontal" AlternatingRowBackground="#FAFAFA">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Code" Binding="{Binding Code}" Width="120"/>
+                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*"/>
+                            <DataGridTextColumn Header="Stock" Binding="{Binding StockQty}" Width="100"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <DockPanel Grid.Row="3" Margin="0,8,0,0">
+                        <TextBlock x:Name="txtLowSummary" VerticalAlignment="Center" />
+                        <Button Content="Open Full List" DockPanel.Dock="Right" Click="OpenLowFull_Click" />
+                    </DockPanel>
+                </Grid>
+            </Border>
+
+            <!-- Unpaid Invoices card -->
+            <Border Grid.Row="4" Style="{StaticResource Card}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="8"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <DockPanel Grid.Row="0" LastChildFill="False">
+                        <TextBlock Text="Unpaid Invoices (by Customer)" FontSize="16" FontWeight="SemiBold" />
+                        <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+                            <TextBlock Text="Top" VerticalAlignment="Center" Margin="12,0,6,0"/>
+                            <ComboBox x:Name="cmbDebtTop" Width="80" SelectedIndex="1" Margin="0,0,8,0">
+                                <ComboBoxItem Content="5"/>
+                                <ComboBoxItem Content="10"/>
+                                <ComboBoxItem Content="20"/>
+                                <ComboBoxItem Content="50"/>
+                            </ComboBox>
+                            <Button Content="Refresh" Click="RefreshDebt_Click"/>
+                        </StackPanel>
+                    </DockPanel>
+
+                    <Separator Grid.Row="1"/>
+
+                    <DataGrid Grid.Row="2" x:Name="gridDebt" AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True"
+                              HeadersVisibility="Column" RowHeight="34" GridLinesVisibility="Horizontal" AlternatingRowBackground="#FAFAFA"
+                              MouseDoubleClick="gridDebt_MouseDoubleClick">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Customer" Binding="{Binding CustomerName}" Width="*"/>
+                            <DataGridTextColumn Header="Invoices" Binding="{Binding InvoiceCount}" Width="100"/>
+                            <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat={}{0:N2}}" Width="140"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <DockPanel Grid.Row="3" Margin="0,8,0,0">
+                        <TextBlock x:Name="txtDebtSummary" VerticalAlignment="Center" />
+                        <Button Content="Open Details" DockPanel.Dock="Right" Click="OpenDebt_Click" />
+                    </DockPanel>
+                </Grid>
+            </Border>
+        </Grid>
+    </ScrollViewer>
+</UserControl>

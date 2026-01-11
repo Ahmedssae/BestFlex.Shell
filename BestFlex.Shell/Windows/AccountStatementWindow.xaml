@@ -1,0 +1,69 @@
+﻿<Window x:Class="BestFlex.Shell.Windows.AccountStatementWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Account Statement" Height="620" Width="940"
+        WindowStartupLocation="CenterOwner">
+    <DockPanel Margin="12">
+
+        <!-- Filters -->
+        <StackPanel Orientation="Horizontal" DockPanel.Dock="Top" Margin="0,0,0,10">
+            <TextBlock Text="Customer:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <TextBox x:Name="txtCustomer" Width="220" Margin="0,0,12,0"/>
+
+            <TextBlock Text="From:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <DatePicker x:Name="dpFrom" Width="140" Margin="0,0,12,0"/>
+
+            <TextBlock Text="To:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <DatePicker x:Name="dpTo" Width="140" Margin="0,0,12,0"/>
+
+            <CheckBox x:Name="chkAging" Content="Include Aging" VerticalAlignment="Center" Margin="12,0,12,0"/>
+
+            <Button Content="Load" Width="100" Click="Load_Click"/>
+        </StackPanel>
+
+        <!-- Opening/Closing -->
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,10">
+            <TextBlock Text="Opening:" FontWeight="Bold" />
+            <TextBlock x:Name="txtOpening" Margin="6,0,20,0"/>
+            <TextBlock Text="Closing:" FontWeight="Bold" />
+            <TextBlock x:Name="txtClosing" Margin="6,0,20,0"/>
+        </StackPanel>
+
+        <!-- Grid -->
+        <DataGrid x:Name="grid" AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True"
+                  HeadersVisibility="Column" RowHeight="34" GridLinesVisibility="Horizontal"
+                  AlternatingRowBackground="#FAFAFA" Width="612" SelectionChanged="grid_SelectionChanged">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Date" Binding="{Binding Date, StringFormat={}{0:yyyy-MM-dd}}" Width="150"/>
+                <DataGridTextColumn Header="Type" Binding="{Binding DocType}" Width="120"/>
+                <DataGridTextColumn Header="Doc #" Binding="{Binding DocNo}" Width="180"/>
+                <DataGridTextColumn Header="Debit" Binding="{Binding Debit, StringFormat={}{0:N2}}" Width="120"/>
+                <DataGridTextColumn Header="Credit" Binding="{Binding Credit, StringFormat={}{0:N2}}" Width="120"/>
+                <DataGridTextColumn Header="Balance" Binding="{Binding Balance, StringFormat={}{0:N2}}" Width="140"/>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <!-- Aging -->
+        <GroupBox Header="Aging (approximate)" Margin="0,10,0,0" DockPanel.Dock="Bottom">
+            <UniformGrid Rows="1" Columns="4" Margin="8">
+                <StackPanel>
+                    <TextBlock Text="0–30" FontWeight="Bold"/>
+                    <TextBlock x:Name="txtA0"/>
+                </StackPanel>
+                <StackPanel>
+                    <TextBlock Text="31–60" FontWeight="Bold"/>
+                    <TextBlock x:Name="txtA1"/>
+                </StackPanel>
+                <StackPanel>
+                    <TextBlock Text="61–90" FontWeight="Bold"/>
+                    <TextBlock x:Name="txtA2"/>
+                </StackPanel>
+                <StackPanel>
+                    <TextBlock Text=">90" FontWeight="Bold"/>
+                    <TextBlock x:Name="txtA3"/>
+                </StackPanel>
+            </UniformGrid>
+        </GroupBox>
+
+    </DockPanel>
+</Window>

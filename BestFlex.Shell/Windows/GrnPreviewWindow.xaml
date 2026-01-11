@@ -1,0 +1,13 @@
+﻿<Window x:Class="BestFlex.Shell.Windows.GrnPreviewWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="GRN Preview" Height="720" Width="980"
+        WindowStartupLocation="CenterOwner">
+    <DockPanel>
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Background="#F3F4F6" Margin="0,0,0,6">
+            <Button x:Name="btnPrint" Content="Print" Margin="6" Padding="10,6"/>
+            <Button x:Name="btnClose" Content="Close" Margin="6" Padding="10,6"/>
+        </StackPanel>
+        <DocumentViewer x:Name="viewer"/>
+    </DockPanel>
+</Window>

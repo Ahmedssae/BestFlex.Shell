@@ -1,0 +1,5 @@
+﻿{
+  "ConnectionStrings": {
+    "LocalSqlite": "Data Source=bestflex_local.db"
+  }
+}

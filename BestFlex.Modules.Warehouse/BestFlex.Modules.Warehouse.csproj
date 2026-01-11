@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BestFlex.Application\BestFlex.Application.csproj" />
+    <ProjectReference Include="..\BestFlex.Domain\BestFlex.Domain.csproj" />
+    <ProjectReference Include="..\BestFlex.Modules.Common\BestFlex.Modules.Common.csproj" />
+  </ItemGroup>
+
+</Project>
