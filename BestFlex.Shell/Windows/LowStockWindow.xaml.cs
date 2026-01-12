@@ -12,42 +12,27 @@ namespace BestFlex.Shell.Windows
 {
     public partial class LowStockWindow : Window
     {
-        private readonly ObservableCollection<InventoryReadService.LowStockDto> _rows = new();
+        private readonly LowStockWindowViewModel _vm;
+        private readonly int _threshold;
 
         public LowStockWindow(int threshold)
         {
             InitializeComponent();
-            grid.ItemsSource = _rows;
-            txtThreshold.Text = threshold.ToString(CultureInfo.InvariantCulture);
+            _threshold = threshold;
+            _vm = new LowStockWindowViewModel(((App)System.Windows.Application.Current).Services);
+            grid.ItemsSource = _vm.Rows;
+            txtThreshold.Text = threshold.ToString(System.Globalization.CultureInfo.InvariantCulture);
             Loaded += async (_, __) => await ReloadAsync();
         }
 
-        private int Threshold
-        {
-            get
-            {
-                var s = (txtThreshold.Text ?? "").Trim();
-                return int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? n : 5;
-            }
-        }
+        private int Threshold => _threshold;
 
         private async Task ReloadAsync(CancellationToken ct = default)
         {
             try
             {
-                var sp = ((App)System.Windows.Application.Current).Services;
-                using var scope = sp.CreateScope();
-                var db = scope.ServiceProvider.GetRequiredService<BestFlexDbContext>();
-                var svc = new InventoryReadService(db);
-
-                // cap at 2000 to avoid accidental huge grids
-                var list = await svc.GetAllLowStockAsync(Threshold, cap: 2000, ct);
-                var total = await svc.CountLowStockAsync(Threshold, ct);
-
-                _rows.Clear();
-                foreach (var row in list) _rows.Add(row);
-
-                txtSummary.Text = $"Total low-stock items: {total}";
+                await _vm.LoadAsync(Threshold, cap: 2000, ct);
+                txtSummary.Text = $"Total low-stock items: {_vm.Total}";
             }
             catch (Exception ex)
             {

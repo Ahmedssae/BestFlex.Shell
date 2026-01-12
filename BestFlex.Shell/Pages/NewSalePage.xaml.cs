@@ -15,15 +15,17 @@ namespace BestFlex.Shell.Pages
 {
     public partial class NewSalePage : UserControl, INotifyPropertyChanged
     {
-        public ObservableCollection<ProductVm> Products { get; } = new();
-        public ObservableCollection<LineVm> Lines { get; } = new();
+        private readonly BestFlex.Shell.ViewModels.NewSaleViewModel _vm;
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
         public NewSalePage()
         {
             InitializeComponent();
-            DataContext = this;
+            var app = (App)System.Windows.Application.Current;
+            var sales = app.Services.GetRequiredService<BestFlex.Application.Abstractions.ISalesService>();
+            _vm = new BestFlex.Shell.ViewModels.NewSaleViewModel(app.Services, sales);
+            DataContext = _vm;
         }
 
         private void Raise([CallerMemberName] string? p = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(p));
@@ -33,9 +35,9 @@ namespace BestFlex.Shell.Pages
             cmbCurrency.SelectedIndex = 0;
             dpDate.SelectedDate = DateTime.Today;
 
-            await LoadLookupsAsync();
+            await _vm.LoadLookupsAsync();
             // start with one line
-            AddLine();
+            await _vm.AddLineAsync();
             UpdateTotals();
         }
 
@@ -44,46 +46,8 @@ namespace BestFlex.Shell.Pages
             try
             {
                 ShowOverlay(true);
-
-                var sp = ((App)System.Windows.Application.Current).Services;
-                using var scope = sp.CreateScope();
-                var db = scope.ServiceProvider.GetRequiredService<BestFlexDbContext>();
-
-                var customers = await db.CustomerAccounts
-                    .AsNoTracking()
-                    .OrderBy(c => c.Name)
-                    .Select(c => new { c.Id, c.Name })
-                    .ToListAsync();
-
-                cmbCustomer.ItemsSource = customers;
-
-                var prods = await db.Products
-                    .AsNoTracking()
-                    .OrderBy(p => p.Code)
-                    .Select(p => new
-                    {
-                        p.Id,
-                        p.Code,
-                        p.Name,
-                        p.StockQty,
-                        // Try to resolve a price column (DefaultPrice / SellingPrice / Price). Use 0 when absent.
-                        DefaultPrice = (decimal?)0m
-                    })
-                    .ToListAsync();
-
-                Products.Clear();
-                foreach (var p in prods)
-                {
-                    var price = await TryResolvePriceAsync(p.Id);
-                    Products.Add(new ProductVm
-                    {
-                        Id = p.Id,
-                        Code = p.Code,
-                        Name = p.Name,
-                        StockQty = p.StockQty,
-                        DefaultPrice = price ?? 0m
-                    });
-                }
+                await _vm.LoadLookupsAsync();
+                cmbCustomer.ItemsSource = _vm.Customers;
             }
             catch (Exception ex)
             {
@@ -96,25 +60,7 @@ namespace BestFlex.Shell.Pages
             }
         }
 
-        // Reflectively attempt to read price columns without compile-time coupling
-        private async Task<decimal?> TryResolvePriceAsync(int productId)
-        {
-            var sp = ((App)System.Windows.Application.Current).Services;
-            using var scope = sp.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<BestFlexDbContext>();
-
-            var p = await db.Products.AsNoTracking().FirstOrDefaultAsync(x => x.Id == productId);
-            if (p == null) return null;
-
-            var t = p.GetType();
-            var priceProp = t.GetProperty("DefaultPrice")
-                          ?? t.GetProperty("SellingPrice")
-                          ?? t.GetProperty("Price");
-            if (priceProp != null && priceProp.PropertyType == typeof(decimal))
-                return (decimal)priceProp.GetValue(p)!;
-
-            return null;
-        }
+        // Price resolution moved into NewSaleViewModel.TryResolvePriceAsync
 
         // ---------- UI actions ----------
         private void BtnAddProduct_Click(object sender, RoutedEventArgs e)
@@ -136,11 +82,20 @@ namespace BestFlex.Shell.Pages
                         {
                             int v = (int)Convert.ChangeType(idProp.GetValue(just), typeof(int), CultureInfo.InvariantCulture);
                             var id = v;
-                            var line = Lines.LastOrDefault() ?? AddLine();
-                            line.ProductId = id;
-                            line.UnitPrice = Products.FirstOrDefault(x => x.Id == id)?.DefaultPrice ?? 0m;
-                            line.Qty = 1m;
-                            UpdateTotals();
+                            var line = _vm.Lines.LastOrDefault();
+                            if (line == null)
+                            {
+                                // sync add a line
+                                _ = _vm.AddLineAsync();
+                                line = _vm.Lines.LastOrDefault();
+                            }
+                            if (line != null)
+                            {
+                                line.ProductId = id;
+                                line.UnitPrice = _vm.Products.FirstOrDefault(x => x.Id == id)?.DefaultPrice ?? 0m;
+                                line.Quantity = 1m;
+                                UpdateTotals();
+                            }
                         }
                     });
                 });
@@ -166,39 +121,31 @@ namespace BestFlex.Shell.Pages
                     {
                         Dispatcher.Invoke(() =>
                         {
-                            var list = (cmbCustomer.ItemsSource as System.Collections.IEnumerable)?.Cast<dynamic>().ToList();
-                            var found = list?.FirstOrDefault(x => (string)x.Name == name);
+                            var found = _vm.Customers.FirstOrDefault(x => x.Name == name);
                             if (found != null)
-                                cmbCustomer.SelectedValue = (int)found.Id;
+                                cmbCustomer.SelectedValue = found.Id;
                         });
                     });
                 }
             }
         }
 
-        private LineVm AddLine()
-        {
-            var vm = new LineVm(this);
-            Lines.Add(vm);
-            return vm;
-        }
-
-        private void BtnAddLine_Click(object sender, RoutedEventArgs e) => AddLine();
+        private void BtnAddLine_Click(object sender, RoutedEventArgs e) => _ = _vm.AddLineAsync();
 
         private void BtnRemoveLine_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is Button b && b.DataContext is LineVm vm)
+            if (sender is Button b && b.DataContext is BestFlex.Shell.ViewModels.SaleLineVm vm)
             {
-                Lines.Remove(vm);
+                _vm.RemoveLine(vm);
                 UpdateTotals();
             }
         }
 
         private void UpdateTotals()
         {
-            var subtotal = Lines.Sum(l => l.LineTotal);
+            var subtotal = _vm.Subtotal;
             txtSubTotal.Text = subtotal.ToString("N2", CultureInfo.InvariantCulture);
-            txtItems.Text = Lines.Sum(l => l.Qty).ToString("N2", CultureInfo.InvariantCulture);
+            txtItems.Text = _vm.ItemsCount.ToString("N2", CultureInfo.InvariantCulture);
         }
 
         internal void OnLineChanged()
@@ -222,83 +169,5 @@ namespace BestFlex.Shell.Pages
         }
     }
 
-    // ---------- VMs ----------
-    public sealed class ProductVm
-    {
-        public int Id { get; set; }
-        public string Code { get; set; } = "";
-        public string Name { get; set; } = "";
-        public decimal StockQty { get; set; }
-        public decimal DefaultPrice { get; set; }
-
-        public string Display => string.IsNullOrWhiteSpace(Code) ? Name : $"{Code} — {Name}";
-    }
-
-    public sealed class LineVm : INotifyPropertyChanged
-    {
-        private readonly NewSalePage _owner;
-        public event PropertyChangedEventHandler? PropertyChanged;
-        private int _productId;
-        private decimal _qty;
-        private decimal _unitPrice;
-        private decimal _stockQty;
-        private string _productName = "";
-        private string _productCode = "";
-
-        public LineVm(NewSalePage owner)
-        {
-            _owner = owner;
-        }
-
-        public int ProductId
-        {
-            get => _productId;
-            set
-            {
-                if (_productId == value) return;
-                _productId = value;
-                OnChanged();
-                // auto-fill price and stock
-                var p = _owner.Products.FirstOrDefault(x => x.Id == _productId);
-                if (p != null)
-                {
-                    _productName = p.Name;
-                    _productCode = p.Code;
-                    StockQty = p.StockQty;
-                    if (UnitPrice == 0m) UnitPrice = p.DefaultPrice;
-                    if (Qty == 0m) Qty = 1m;
-                }
-                _owner.OnLineChanged();
-                Raise(nameof(StockText));
-            }
-        }
-
-        public string ProductName => _productName;
-        public string ProductCode => _productCode;
-
-        public decimal StockQty
-        {
-            get => _stockQty;
-            private set { _stockQty = value; Raise(nameof(StockQty)); Raise(nameof(StockText)); }
-        }
-
-        public string StockText => StockQty <= 0 ? "⚠ out" : $"Stock: {StockQty:N0}";
-
-        public decimal Qty
-        {
-            get => _qty;
-            set { _qty = value < 0 ? 0 : value; OnChanged(); _owner.OnLineChanged(); }
-        }
-
-        public decimal UnitPrice
-        {
-            get => _unitPrice;
-            set { _unitPrice = value < 0 ? 0 : value; OnChanged(); _owner.OnLineChanged(); }
-        }
-
-        public decimal LineTotal => Math.Round(Qty * UnitPrice, 2, MidpointRounding.AwayFromZero);
-
-        private void OnChanged([CallerMemberName] string? p = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(p));
-        private void Raise(string p) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(p));
-    }
+    // View model types live in BestFlex.Shell.ViewModels.NewSaleViewModel; code-behind is UI-only now.
 }
