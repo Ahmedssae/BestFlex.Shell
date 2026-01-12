@@ -22,6 +22,7 @@ namespace BestFlex.Shell.ViewModels
         { _execute = execute ?? throw new ArgumentNullException(nameof(execute)); _canExecute = canExecute; }
         public bool CanExecute(object? p) => !_running && (_canExecute?.Invoke() ?? true);
         public event EventHandler? CanExecuteChanged;
+        public void RaiseCanExecuteChanged() => CanExecuteChanged?.Invoke(this, EventArgs.Empty);
         public async void Execute(object? p)
         {
             if (!CanExecute(p)) return; try { _running = true; CanExecuteChanged?.Invoke(this, EventArgs.Empty); await _execute(); }
