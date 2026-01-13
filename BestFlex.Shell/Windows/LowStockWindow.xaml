@@ -11,7 +11,7 @@
             <TextBlock x:Name="txtSummary" VerticalAlignment="Center" Margin="16,0,0,0"/>
         </StackPanel>
 
-        <DataGrid x:Name="grid" Margin="12" AutoGenerateColumns="False" CanUserAddRows="False"
+        <DataGrid x:Name="grid" Margin="12" ItemsSource="{Binding Items}" AutoGenerateColumns="False" CanUserAddRows="False"
                   IsReadOnly="True" RowHeight="34" HeadersVisibility="Column"
                   GridLinesVisibility="Horizontal" AlternatingRowBackground="#FAFAFA">
             <DataGrid.Columns>

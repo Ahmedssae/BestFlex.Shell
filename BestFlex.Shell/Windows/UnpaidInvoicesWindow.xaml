@@ -25,7 +25,8 @@
 
                 <Button Content="Refresh" Margin="8,0,0,0" Click="Refresh_Click"/>
             </StackPanel>
-            <TextBlock x:Name="txtSummary" DockPanel.Dock="Right" VerticalAlignment="Center"/>
+            <TextBlock x:Name="txtSummary" DockPanel.Dock="Right" VerticalAlignment="Center"
+                       Text="{Binding TotalOutstanding, StringFormat={}{0:N2}}"/>
         </DockPanel>
 
         <Grid Grid.Row="2">
@@ -39,7 +40,8 @@
             <DataGrid x:Name="gridCustomers" AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True"
                       HeadersVisibility="Column" RowHeight="34" GridLinesVisibility="Horizontal"
                       AlternatingRowBackground="#FAFAFA"
-                      SelectionChanged="gridCustomers_SelectionChanged">
+                      SelectionChanged="gridCustomers_SelectionChanged"
+                      ItemsSource="{Binding Items}">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Customer" Binding="{Binding CustomerName}" Width="*"/>
                     <DataGridTextColumn Header="Invoices" Binding="{Binding InvoiceCount}" Width="100"/>

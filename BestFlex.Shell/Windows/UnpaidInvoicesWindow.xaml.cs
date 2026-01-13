@@ -13,17 +13,17 @@ namespace BestFlex.Shell.Windows
 {
     public partial class UnpaidInvoicesWindow : Window
     {
-        private readonly UnpaidInvoicesWindowViewModel _vm;
+        private readonly ViewModels.UnpaidInvoicesViewModel _vm;
         private readonly int? _preselectCustomerId;
 
         public UnpaidInvoicesWindow(int top, int? preselectCustomerId = null)
         {
             InitializeComponent();
-            _vm = new UnpaidInvoicesWindowViewModel(((App)System.Windows.Application.Current).Services);
-            gridCustomers.ItemsSource = _vm.Customers;
-            gridInvoices.ItemsSource = _vm.Invoices;
-
             _preselectCustomerId = preselectCustomerId;
+
+            // resolve VM from DI and bind to DataContext
+            _vm = ((App)System.Windows.Application.Current).Services.GetRequiredService<ViewModels.UnpaidInvoicesViewModel>();
+            DataContext = _vm;
 
             // Set Top combo
             var idx = new[] { 5, 10, 20, 50, 100 }.ToList().FindIndex(x => x == top);
@@ -45,44 +45,29 @@ namespace BestFlex.Shell.Windows
 
         private async Task ReloadAsync(CancellationToken ct = default)
         {
-            try
-            {
-                await _vm.LoadAsync(TopN, ct);
-                txtSummary.Text = $"Top {_vm.Customers.Count} customers by outstanding amount";
+            await _vm.LoadAsync(TopN, ct);
 
-                // preselect
-                if (_preselectCustomerId.HasValue)
-                {
-                    var row = _vm.Customers.FirstOrDefault(x => x.CustomerAccountId == _preselectCustomerId.Value);
-                    if (row != null) gridCustomers.SelectedItem = row;
-                    await LoadInvoicesForSelectedAsync(ct);
-                }
-            }
-            catch (Exception ex)
+            // preselect
+            if (_preselectCustomerId.HasValue)
             {
-                MessageBox.Show(this, $"Failed to load unpaid invoices.\n\n{ex.Message}", "Unpaid Invoices",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
+                var row = _vm.Items.FirstOrDefault(x => x.CustomerAccountId == _preselectCustomerId.Value);
+                if (row != null) gridCustomers.SelectedItem = row;
+                await LoadInvoicesForSelectedAsync(ct);
             }
         }
 
         private async Task LoadInvoicesForSelectedAsync(CancellationToken ct = default)
         {
-            try
-            {
-                if (gridCustomers.SelectedItem is not SalesReadService.CustomerOutstandingDto row) return;
+            if (gridCustomers.SelectedItem is not ViewModels.UnpaidInvoicesViewModel.UnpaidCustomerVm row) return;
 
-                await _vm.LoadInvoicesForCustomerAsync(row.CustomerAccountId, ct);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(this, $"Failed to load customer invoices.\n\n{ex.Message}", "Unpaid Invoices",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+            // Delegate to the ViewModel to load invoices for the selected customer
+            await _vm.LoadInvoicesForCustomerAsync(row.CustomerAccountId, ct);
+            gridInvoices.ItemsSource = _vm.Invoices;
         }
 
         private async void OpenStatement_Click(object sender, RoutedEventArgs e)
         {
-            var selectedCustomer = gridCustomers.SelectedItem as dynamic;
+            var selectedCustomer = gridCustomers.SelectedItem as ViewModels.UnpaidInvoicesViewModel.UnpaidCustomerVm;
             if (selectedCustomer == null)
             {
                 MessageBox.Show(this, "Select a customer first.", "Unpaid Invoices",
@@ -90,7 +75,7 @@ namespace BestFlex.Shell.Windows
                 return;
             }
 
-            string customerName = selectedCustomer.Name; // keep if your DTO has Name
+            string customerName = selectedCustomer.CustomerName;
             var app = (App)System.Windows.Application.Current;   // << fix here
             var wnd = app.Services.GetRequiredService<AccountStatementWindow>();
             wnd.Owner = this;

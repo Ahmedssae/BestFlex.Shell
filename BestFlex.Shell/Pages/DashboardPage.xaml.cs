@@ -17,7 +17,7 @@ namespace BestFlex.Shell.Pages
 {
     public partial class DashboardPage : UserControl, INotifyPropertyChanged
     {
-        private readonly DashboardPageViewModel _vm;
+        private readonly ViewModels.DashboardViewModel _vm;
 
         // Theme label text bound from XAML
         private string _themeText = "Light";
@@ -30,13 +30,14 @@ namespace BestFlex.Shell.Pages
         public DashboardPage()
         {
             InitializeComponent();
-            _vm = new DashboardPageViewModel(((App)System.Windows.Application.Current).Services);
+            _vm = ((App)System.Windows.Application.Current).Services.GetRequiredService<ViewModels.DashboardViewModel>();
             gridLow.ItemsSource = _vm.LowStock;
             gridDebt.ItemsSource = _vm.TopDebt;
 
-            // Keep DataContext for theme binding
-            DataContext = this;
-
+            // Set DataContext to the dashboard view model. ThemeText in XAML uses RelativeSource to the UserControl
+            // so it remains available from the code-behind even when DataContext is the VM.
+            DataContext = _vm;
+            // Also bind the low/debt grids to the VM (done above)
             ThemeText = UserPrefs.Current.Theme == "Dark" ? "Dark" : "Light";
         }
 
@@ -89,7 +90,9 @@ namespace BestFlex.Shell.Pages
 
         private async Task ReloadAllAsync()
         {
-            await _vm.ReloadAllAsync(LowThreshold, LowTopN, DebtTopN);
+            var from = DateTime.Today.AddDays(-13); // last 14 days by default
+            var to = DateTime.Today;
+            await _vm.ReloadAllAsync(LowThreshold, LowTopN, DebtTopN, from, to);
             txtLowSummary.Text = _vm.LowSummary;
             txtDebtSummary.Text = _vm.DebtSummary;
         }

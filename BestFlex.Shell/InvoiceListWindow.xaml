@@ -27,7 +27,7 @@
 
         <!-- List -->
         <DataGrid x:Name="GridInvoices"
-                  ItemsSource="{Binding Invoices}"
+                  ItemsSource="{Binding Items}"
                   AutoGenerateColumns="False"
                   IsReadOnly="True"
                   SelectionMode="Single"
@@ -67,16 +67,16 @@
                     <Separator Width="10" Opacity="0"/>
 
                     <Button Content="⟨ Prev" Width="80"
-                            IsEnabled="{Binding HasPrevPage}"
-                            Click="Prev_Click" Margin="6,0,6,0"/>
+                            Command="{Binding PreviousPageCommand}"
+                            Margin="6,0,6,0"/>
                     <TextBlock Text="{Binding PageIndicatorText}" VerticalAlignment="Center" />
                     <Button Content="Next ⟩" Width="80"
-                            IsEnabled="{Binding HasNextPage}"
-                            Click="Next_Click" Margin="6,0,6,0"/>
+                            Command="{Binding NextPageCommand}"
+                            Margin="6,0,6,0"/>
 
                     <TextBlock Text="Go to:" VerticalAlignment="Center" Margin="8,0,6,0"/>
                     <TextBox Width="50" Text="{Binding GoToPageText, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,6,0"/>
-                    <Button Content="Go" Width="50" Click="Go_Click"/>
+                    <Button Content="Go" Width="50" Command="{Binding GoToPageCommand}" CommandParameter="{Binding GoToPageText}"/>
                 </StackPanel>
             </Grid>
         </Border>

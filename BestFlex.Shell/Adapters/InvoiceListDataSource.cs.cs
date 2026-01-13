@@ -2,7 +2,7 @@
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
-using BestFlex.Shell.ViewModels;
+using BestFlex.Shell.ViewModels; // we'll add this interface next
 using BestFlex.Application.Abstractions; // we'll add this interface next
 
 namespace BestFlex.Shell.Adapters
@@ -28,7 +28,7 @@ namespace BestFlex.Shell.Adapters
             // If you want a (All) option: insert one at index 0.
         }
 
-        public async Task<InvoiceListViewModel.PagedResult<InvoiceListViewModel.InvoiceRow>> QueryInvoicesAsync(
+        public async Task<BestFlex.Shell.Infrastructure.PagedResult<InvoiceListViewModel.InvoiceRow>> QueryInvoicesAsync(
             System.DateTime? start, System.DateTime? end, int? customerId, string? numberLike, int pageNumber, int pageSize)
         {
             var result = await _svc.SearchInvoicesAsync(new InvoiceSearchFilter
@@ -52,9 +52,11 @@ namespace BestFlex.Shell.Adapters
                 Currency = i.Currency
             }).ToList();
 
-            return new InvoiceListViewModel.PagedResult<InvoiceListViewModel.InvoiceRow>(
+            return new BestFlex.Shell.Infrastructure.PagedResult<InvoiceListViewModel.InvoiceRow>(
                 new ReadOnlyCollection<InvoiceListViewModel.InvoiceRow>(rows),
-                result.TotalCount
+                result.TotalCount,
+                pageNumber,
+                pageSize
             );
         }
     }

@@ -93,6 +93,10 @@ namespace BestFlex.Shell
 
                     // Windows
                     services.AddTransient<MainWindow>();
+                    // ViewModels
+                    services.AddTransient<BestFlex.Shell.ViewModels.LowStockViewModel>();
+                    services.AddTransient<BestFlex.Shell.ViewModels.UnpaidInvoicesViewModel>();
+                    services.AddTransient<BestFlex.Shell.ViewModels.DashboardViewModel>();
                     TryAddTransient(services, "BestFlex.Shell.LoginWindow");
                     TryAddTransient(services, "BestFlex.Shell.SettingsWindow");
                     TryAddTransient(services, "BestFlex.Shell.ChangePasswordWindow");

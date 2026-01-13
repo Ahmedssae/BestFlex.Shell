@@ -16,13 +16,23 @@
             <DockPanel Grid.Row="0" LastChildFill="False">
                 <TextBlock Text="Dashboard" FontSize="20" FontWeight="SemiBold" />
                 <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
-                    <TextBlock Text="Theme:" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                    <!-- Bind Content to ThemeText on the page (no named element required) -->
-                    <Button x:Name="btnTheme"
-                            Width="110" Height="28"
-                            Style="{StaticResource BtnSecondary}"
-                            Click="btnTheme_Click"
-                            Content="{Binding ThemeText, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0">
+                        <TextBlock Text="Today:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBlock Text="{Binding TodaySales, StringFormat={}{0:N2}}" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,12,0"/>
+                        <TextBlock Text="Month:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBlock Text="{Binding MonthSales, StringFormat={}{0:N2}}" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,12,0"/>
+                        <TextBlock Text="Receivables:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBlock Text="{Binding TotalReceivables, StringFormat={}{0:N2}}" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="Theme:" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                        <!-- Bind Content to ThemeText on the page (no named element required) -->
+                        <Button x:Name="btnTheme"
+                                Width="110" Height="28"
+                                Style="{StaticResource BtnSecondary}"
+                                Click="btnTheme_Click"
+                                Content="{Binding ThemeText, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                    </StackPanel>
                 </StackPanel>
             </DockPanel>
 
@@ -56,7 +66,7 @@
 
                     <Separator Grid.Row="1"/>
 
-                    <DataGrid Grid.Row="2" x:Name="gridLow" AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True"
+            <DataGrid Grid.Row="2" x:Name="gridLow" ItemsSource="{Binding LowStock}" AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True"
                               HeadersVisibility="Column" RowHeight="34" GridLinesVisibility="Horizontal" AlternatingRowBackground="#FAFAFA">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Code" Binding="{Binding Code}" Width="120"/>
@@ -98,7 +108,7 @@
 
                     <Separator Grid.Row="1"/>
 
-                    <DataGrid Grid.Row="2" x:Name="gridDebt" AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True"
+                    <DataGrid Grid.Row="2" x:Name="gridDebt" ItemsSource="{Binding TopDebt}" AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True"
                               HeadersVisibility="Column" RowHeight="34" GridLinesVisibility="Horizontal" AlternatingRowBackground="#FAFAFA"
                               MouseDoubleClick="gridDebt_MouseDoubleClick">
                         <DataGrid.Columns>

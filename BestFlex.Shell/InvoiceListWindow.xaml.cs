@@ -19,31 +19,18 @@ namespace BestFlex.Shell
             _vm = app.Services.GetRequiredService<InvoiceListViewModel>();
             DataContext = _vm;
 
-            // Auto-set a wide, useful range and search on load
-            Loaded += async (_, __) =>
-            {
-                // If your VM uses different names (e.g., From/To), adjust below:
-                _vm.FromDate = DateTime.Today.AddDays(-90);
-                _vm.ToDate = DateTime.Today.AddDays(1);
-
-                // Show all customers by default (if your VM has this property)
-                _vm.SelectedCustomer = null;
-
-                await _vm.SearchAsync(resetToFirstPage: true);
-            };
+            // Auto-set a wide, useful range and load on window loaded
+            Loaded += async (_, __) => await _vm.LoadAsync();
         }
 
         private async void Search_Click(object sender, RoutedEventArgs e)
             => await _vm.SearchAsync(resetToFirstPage: true);
+        private void Go_Click(object sender, RoutedEventArgs e)
+        {
+            // Handled by command binding in XAML; keep method for legacy hookup if needed.
+        }
 
-        private async void Prev_Click(object sender, RoutedEventArgs e)
-            => await _vm.GoPrevAsync();
-
-        private async void Next_Click(object sender, RoutedEventArgs e)
-            => await _vm.GoNextAsync();
-
-        private async void Go_Click(object sender, RoutedEventArgs e)
-            => await _vm.GoToPageAsync();
+        // Paging handled via commands on the ViewModel (bound in XAML). Code-behind performs no paging.
 
         private void GridInvoices_MouseDoubleClick(object sender, MouseButtonEventArgs e)
             => OpenSelected();
@@ -54,7 +41,7 @@ namespace BestFlex.Shell
         private void OpenSelected()
         {
             var row = GridInvoices?.SelectedItem as InvoiceListViewModel.InvoiceRow
-                      ?? _vm.Invoices.FirstOrDefault();
+                      ?? _vm.Items.FirstOrDefault();
 
             if (row == null)
             {

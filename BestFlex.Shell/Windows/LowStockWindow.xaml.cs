@@ -12,15 +12,16 @@ namespace BestFlex.Shell.Windows
 {
     public partial class LowStockWindow : Window
     {
-        private readonly LowStockWindowViewModel _vm;
+        private readonly ViewModels.LowStockViewModel _vm;
         private readonly int _threshold;
 
         public LowStockWindow(int threshold)
         {
             InitializeComponent();
             _threshold = threshold;
-            _vm = new LowStockWindowViewModel(((App)System.Windows.Application.Current).Services);
-            grid.ItemsSource = _vm.Rows;
+            _vm = ((App)System.Windows.Application.Current).Services.GetRequiredService<ViewModels.LowStockViewModel>();
+            DataContext = _vm;
+            // bind grid in XAML to Items; keep threshold text for display
             txtThreshold.Text = threshold.ToString(System.Globalization.CultureInfo.InvariantCulture);
             Loaded += async (_, __) => await ReloadAsync();
         }
@@ -29,16 +30,9 @@ namespace BestFlex.Shell.Windows
 
         private async Task ReloadAsync(CancellationToken ct = default)
         {
-            try
-            {
-                await _vm.LoadAsync(Threshold, cap: 2000, ct);
-                txtSummary.Text = $"Total low-stock items: {_vm.Total}";
-            }
-            catch (Exception ex)
-            {
-                // Here 'this' IS a Window, so this overload is valid
-                MessageBox.Show(this, $"Failed to load low stock list.\n\n{ex.Message}", "Low Stock", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+            await _vm.LoadAsync(Threshold, cap: 2000, ct);
+            // window is UI-only: summary binding may be in XAML; keep existing txtSummary update for parity
+            txtSummary.Text = $"Total low-stock items: {_vm.Total}";
         }
 
         private async void Refresh_Click(object sender, RoutedEventArgs e) => await ReloadAsync();

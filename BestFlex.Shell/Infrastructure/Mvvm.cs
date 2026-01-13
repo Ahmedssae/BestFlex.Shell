@@ -29,4 +29,31 @@ namespace BestFlex.Shell.ViewModels
             finally { _running = false; CanExecuteChanged?.Invoke(this, EventArgs.Empty); }
         }
     }
+
+    public sealed class AsyncRelayCommand<T> : ICommand
+    {
+        private readonly Func<T, Task> _execute; private readonly Func<T, bool>? _canExecute; private bool _running;
+        public AsyncRelayCommand(Func<T, Task> execute, Func<T, bool>? canExecute = null)
+        { _execute = execute ?? throw new ArgumentNullException(nameof(execute)); _canExecute = canExecute; }
+        public bool CanExecute(object? p)
+        {
+            if (_running) return false;
+            if (_canExecute == null) return true;
+            if (p == null && typeof(T).IsValueType) return _canExecute.Invoke(default!);
+            return _canExecute.Invoke((T?)p!);
+        }
+        public event EventHandler? CanExecuteChanged;
+        public void RaiseCanExecuteChanged() => CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+        public async void Execute(object? p)
+        {
+            if (!CanExecute(p)) return;
+            try
+            {
+                _running = true; CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+                var arg = (p == null) ? default! : (T)p;
+                await _execute(arg);
+            }
+            finally { _running = false; CanExecuteChanged?.Invoke(this, EventArgs.Empty); }
+        }
+    }
 }
