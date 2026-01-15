@@ -12,11 +12,13 @@ namespace BestFlex.Shell.ViewModels
     public sealed class UnpaidInvoicesViewModel : ViewModelBase
     {
         private readonly IServiceProvider _sp;
+        private readonly BestFlex.Application.Abstractions.INavigationService _nav;
         private readonly Infrastructure.PaginationState _paging = new();
 
-        public UnpaidInvoicesViewModel(IServiceProvider sp)
+        public UnpaidInvoicesViewModel(IServiceProvider sp, BestFlex.Application.Abstractions.INavigationService nav)
         {
             _sp = sp ?? throw new ArgumentNullException(nameof(sp));
+            _nav = nav ?? throw new ArgumentNullException(nameof(nav));
         }
 
         public ObservableCollection<UnpaidCustomerVm> Items { get; } = new();

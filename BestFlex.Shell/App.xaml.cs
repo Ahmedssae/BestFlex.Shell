@@ -44,6 +44,12 @@ namespace BestFlex.Shell
                     services.AddTransient<InvoicesPage>();
                     services.AddTransient<TemplateDesignerPage>();
 
+                    // Navigation service and navigable windows
+                    services.AddSingleton<BestFlex.Application.Abstractions.INavigationService, BestFlex.Shell.Services.NavigationService>();
+                    services.AddTransient<InvoiceDetailsWindow>();
+                    services.AddTransient<BestFlex.Shell.Windows.LowStockWindow>();
+                    services.AddTransient<BestFlex.Shell.Windows.UnpaidInvoicesWindow>();
+
                     // Db + login stack
                     services.AddDbContext<BestFlexDbContext>(opt =>
                         opt.UseSqlite("Data Source=bestflex_local.db"));
@@ -93,10 +99,20 @@ namespace BestFlex.Shell
 
                     // Windows
                     services.AddTransient<MainWindow>();
+                    // Navigation service (centralized)
+                    services.AddSingleton<BestFlex.Application.Abstractions.INavigationService, BestFlex.Shell.Services.NavigationService>();
+                    // Ensure navigated windows are registered
+                    services.AddTransient<BestFlex.Shell.InvoiceDetailsWindow>();
+                    // NewSaleWindow removed - NewSale is a Page
+                    services.AddTransient<BestFlex.Shell.Windows.LowStockWindow>();
+                    services.AddTransient<BestFlex.Shell.Windows.UnpaidInvoicesWindow>();
+                    services.AddTransient<BestFlex.Shell.NewSaleWindow>();
                     // ViewModels
                     services.AddTransient<BestFlex.Shell.ViewModels.LowStockViewModel>();
                     services.AddTransient<BestFlex.Shell.ViewModels.UnpaidInvoicesViewModel>();
                     services.AddTransient<BestFlex.Shell.ViewModels.DashboardViewModel>();
+                    // Navigation service registration
+                    services.AddSingleton<BestFlex.Application.Abstractions.INavigationService, BestFlex.Shell.Services.NavigationService>();
                     TryAddTransient(services, "BestFlex.Shell.LoginWindow");
                     TryAddTransient(services, "BestFlex.Shell.SettingsWindow");
                     TryAddTransient(services, "BestFlex.Shell.ChangePasswordWindow");

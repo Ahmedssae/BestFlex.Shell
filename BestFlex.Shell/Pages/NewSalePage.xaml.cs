@@ -29,7 +29,7 @@ namespace BestFlex.Shell.Pages
             // bind customers in XAML or set ItemsSource here if necessary
             cmbCustomer.ItemsSource = _vm.Customers;
 
-            // set SelectedCustomerId when UI selection changes
+            // set SelectedCustomerId when UI selection changes (nullable-safe)
             cmbCustomer.SelectionChanged += (_, __) => _vm.SelectedCustomerId = cmbCustomer.SelectedValue as int?;
 
             // start with one line via VM

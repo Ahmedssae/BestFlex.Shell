@@ -87,11 +87,11 @@ namespace BestFlex.Shell.Pages
                 var r = new Row
                 {
                     Date = h.IssuedAt.Date,
-                    DocNo = h.InvoiceNo,
+                    DocNo = h.InvoiceNo ?? "",
                     Type = "Invoice",
                     Debit = amount,
                     Credit = 0m,
-                    Notes = h.Description
+                    Notes = h.Description ?? string.Empty
                 };
                 balance += r.Debit - r.Credit;
                 r.Balance = balance;

@@ -16,7 +16,7 @@ namespace BestFlex.Shell
             InitializeComponent();
 
             var app = (App)System.Windows.Application.Current;
-            _vm = app.Services.GetRequiredService<InvoiceListViewModel>();
+            _vm = ((App)System.Windows.Application.Current).Services.GetRequiredService<InvoiceListViewModel>();
             DataContext = _vm;
 
             // Auto-set a wide, useful range and load on window loaded
@@ -57,11 +57,9 @@ namespace BestFlex.Shell
                 return;
             }
 
-            var app = (App)System.Windows.Application.Current;
-            var wnd = app.Services.GetRequiredService<InvoiceDetailsWindow>();
-            wnd.Owner = this;
-            wnd.InvoiceId = row.Id;
-            wnd.ShowDialog();
+            // Use navigation service to open detail window
+            var nav = ((App)System.Windows.Application.Current).Services.GetService<BestFlex.Application.Abstractions.INavigationService>();
+            if (nav != null) nav.OpenInvoiceDetails(row.Id);
         }
 
         private void Close_Click(object sender, RoutedEventArgs e) => Close();

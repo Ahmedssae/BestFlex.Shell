@@ -165,7 +165,8 @@ namespace BestFlex.Shell.ViewModels
             public DelegateCommand(Action act) => _act = act;
             public bool CanExecute(object? p) => true;
             public void Execute(object? p) => _act();
-            public event EventHandler? CanExecuteChanged;
+            // Explicit add/remove to avoid unused-event warnings
+            event EventHandler? ICommand.CanExecuteChanged { add { } remove { } }
         }
         private sealed class DelegateCommand<T> : ICommand
         {
@@ -173,7 +174,8 @@ namespace BestFlex.Shell.ViewModels
             public DelegateCommand(Action<T> act) => _act = act;
             public bool CanExecute(object? p) => true;
             public void Execute(object? p) => _act((T)p!);
-            public event EventHandler? CanExecuteChanged;
+            // Explicit add/remove to avoid unused-event warnings
+            event EventHandler? ICommand.CanExecuteChanged { add { } remove { } }
         }
 
         private async Task<decimal?> TryResolvePriceAsync(int productId)

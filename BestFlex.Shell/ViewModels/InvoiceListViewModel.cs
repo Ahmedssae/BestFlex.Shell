@@ -35,16 +35,22 @@ namespace BestFlex.Shell.ViewModels
         }
 
         private readonly IDataSource _data;
+        private readonly BestFlex.Application.Abstractions.INavigationService _nav;
         private readonly PaginationState _paging = new();
 
-        public InvoiceListViewModel(IDataSource dataSource)
+        private readonly AsyncRelayCommand<int> _openInvoiceCmd;
+
+        public InvoiceListViewModel(IDataSource dataSource, BestFlex.Application.Abstractions.INavigationService nav)
         {
             _data = dataSource ?? throw new ArgumentNullException(nameof(dataSource));
+            _nav = nav ?? throw new ArgumentNullException(nameof(nav));
 
             _nextPageCmd = new AsyncRelayCommand(async () => await GoToPageAsync(PageIndex + 1), () => !IsBusy && PageIndex < TotalPages);
             _prevPageCmd = new AsyncRelayCommand(async () => await GoToPageAsync(PageIndex - 1), () => !IsBusy && PageIndex > 1);
             _goToPageCmd = new AsyncRelayCommand<int>(async p => await GoToPageAsync(p), p => !IsBusy && p >= 1 && p <= TotalPages);
             _searchCmd = new AsyncRelayCommand(async () => { PageIndex = 1; await LoadAsync(); });
+
+            _openInvoiceCmd = new AsyncRelayCommand<int>(async id => await Task.Run(() => _nav.OpenInvoiceDetails(id)), id => id > 0);
 
             // default paging
             PageSize = 25;
@@ -89,6 +95,7 @@ namespace BestFlex.Shell.ViewModels
         public ICommand PreviousPageCommand => _prevPageCmd;
         public ICommand SearchCommand => _searchCmd;
         public ICommand GoToPageCommand => _goToPageCmd;
+        public ICommand OpenInvoiceCommand => _openInvoiceCmd;
 
         private void UpdateCommandStates()
         {

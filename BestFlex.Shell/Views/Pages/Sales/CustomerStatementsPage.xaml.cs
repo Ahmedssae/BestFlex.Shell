@@ -119,7 +119,7 @@ namespace BestFlex.Shell.Pages
             ShowOverlay(true);
             try
             {
-                var customerId = (int)cmbCustomer.SelectedValue;
+                var customerId = cmbCustomer.SelectedValue as int? ?? Convert.ToInt32(cmbCustomer.SelectedValue, CultureInfo.InvariantCulture);
                 var from = dpFrom.SelectedDate?.Date;
                 var to = dpTo.SelectedDate?.Date;
 

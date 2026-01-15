@@ -29,7 +29,7 @@ namespace BestFlex.Shell.Windows
             var idx = new[] { 5, 10, 20, 50, 100 }.ToList().FindIndex(x => x == top);
             cmbTop.SelectedIndex = idx >= 0 ? idx : 1;
 
-            Loaded += async (_, __) => await ReloadAsync();
+            Loaded += (_, __) => _ = ReloadAsync();
         }
 
         private int TopN
@@ -65,7 +65,7 @@ namespace BestFlex.Shell.Windows
             gridInvoices.ItemsSource = _vm.Invoices;
         }
 
-        private async void OpenStatement_Click(object sender, RoutedEventArgs e)
+        private void OpenStatement_Click(object sender, RoutedEventArgs e)
         {
             var selectedCustomer = gridCustomers.SelectedItem as ViewModels.UnpaidInvoicesViewModel.UnpaidCustomerVm;
             if (selectedCustomer == null)
@@ -75,16 +75,10 @@ namespace BestFlex.Shell.Windows
                 return;
             }
 
-            string customerName = selectedCustomer.CustomerName;
-            var app = (App)System.Windows.Application.Current;   // << fix here
-            var wnd = app.Services.GetRequiredService<AccountStatementWindow>();
-            wnd.Owner = this;
-
-            var from = DateTime.Today.AddDays(-90);
-            var to = DateTime.Today;
-
-            await wnd.PreloadAsync(customerName, from, to, includeAging: true);
-            wnd.ShowDialog();
+            // Use navigation service from DI instead of constructing windows here.
+            var app = (App)System.Windows.Application.Current;
+            var nav = app.Services.GetService<BestFlex.Application.Abstractions.INavigationService>();
+            nav?.OpenAccountStatement(selectedCustomer.CustomerAccountId);
         }
 
 

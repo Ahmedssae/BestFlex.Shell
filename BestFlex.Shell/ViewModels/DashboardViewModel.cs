@@ -19,12 +19,13 @@ namespace BestFlex.Shell.ViewModels
     public sealed class DashboardViewModel : ViewModelBase
     {
         private readonly IServiceProvider _sp;
+        private readonly BestFlex.Application.Abstractions.INavigationService _nav;
         private readonly Infrastructure.PaginationState _customerPaging = new();
         private readonly Infrastructure.PaginationState _lowStockPaging = new();
-
-        public DashboardViewModel(IServiceProvider sp)
+        public DashboardViewModel(IServiceProvider sp, BestFlex.Application.Abstractions.INavigationService nav)
         {
             _sp = sp ?? throw new ArgumentNullException(nameof(sp));
+            _nav = nav ?? throw new ArgumentNullException(nameof(nav));
         }
 
         private bool _isBusy;

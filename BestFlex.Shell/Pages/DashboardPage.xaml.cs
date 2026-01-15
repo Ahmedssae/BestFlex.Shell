@@ -104,22 +104,25 @@ namespace BestFlex.Shell.Pages
 
         private void OpenLowFull_Click(object sender, RoutedEventArgs e)
         {
-            var wnd = new Windows.LowStockWindow(LowThreshold) { Owner = Window.GetWindow(this) };
-            wnd.ShowDialog();
+            var app = (App)System.Windows.Application.Current;
+            var nav = app.Services.GetService<BestFlex.Application.Abstractions.INavigationService>();
+            nav?.OpenLowStock(LowThreshold);
         }
 
         private void OpenDebt_Click(object sender, RoutedEventArgs e)
         {
-            var wnd = new Windows.UnpaidInvoicesWindow(DebtTopN) { Owner = Window.GetWindow(this) };
-            wnd.ShowDialog();
+            var app = (App)System.Windows.Application.Current;
+            var nav = app.Services.GetService<BestFlex.Application.Abstractions.INavigationService>();
+            nav?.OpenUnpaidInvoices(DebtTopN);
         }
 
         private void gridDebt_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
             if (gridDebt.SelectedItem is SalesReadService.CustomerOutstandingDto row)
             {
-                var wnd = new Windows.UnpaidInvoicesWindow(DebtTopN, row.CustomerAccountId) { Owner = Window.GetWindow(this) };
-                wnd.ShowDialog();
+                var app = (App)System.Windows.Application.Current;
+                var nav = app.Services.GetService<BestFlex.Application.Abstractions.INavigationService>();
+                nav?.OpenUnpaidInvoices(DebtTopN, row.CustomerAccountId);
             }
         }
 
