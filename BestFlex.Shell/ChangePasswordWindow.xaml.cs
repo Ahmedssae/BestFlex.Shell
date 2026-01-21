@@ -1,6 +1,8 @@
 ﻿using System.Windows;
-using BestFlex.Application.Abstractions; // ICurrentUserService
-using BestFlex.Infrastructure.Services; // PasswordService
+using System.Windows.Controls;
+using BestFlex.Application.Abstractions;
+using BestFlex.Infrastructure.Services;
+using BestFlex.Shell.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 
 
@@ -10,57 +12,34 @@ namespace BestFlex.Shell
 {
     public partial class ChangePasswordWindow : Window
     {
-        private readonly PasswordService _passwords;
-        private readonly ICurrentUserService _current;
+        private readonly ChangePasswordViewModel _vm;
 
         public ChangePasswordWindow()
         {
             InitializeComponent();
-            var app = (App)System.Windows.Application.Current;   // ✅ fully qualified
-            _passwords = app.Services.GetRequiredService<PasswordService>();
-            _current = app.Services.GetRequiredService<ICurrentUserService>();
+            var app = (App)System.Windows.Application.Current;
+            _vm = new ChangePasswordViewModel(app.Services, app.Services.GetRequiredService<IAuditService>());
+            DataContext = _vm;
+            
             Loaded += (_, __) => CurrentBox.Focus();
         }
 
 
-        private async void Save_Click(object sender, RoutedEventArgs e)
+        private void CurrentBox_PasswordChanged(object sender, RoutedEventArgs e)
         {
-            ErrorText.Visibility = Visibility.Collapsed;
+            if (sender is PasswordBox pb) _vm.CurrentPassword = pb.Password ?? string.Empty;
+        }
 
-            var curr = CurrentBox.Password ?? "";
-            var next = NewBox.Password ?? "";
+        private void NewBox_PasswordChanged(object sender, RoutedEventArgs e)
+        {
+            if (sender is PasswordBox pb) _vm.NewPassword = pb.Password ?? string.Empty;
+        }
 
-            if (string.IsNullOrWhiteSpace(curr) || string.IsNullOrWhiteSpace(next))
-            {
-                ShowError("Enter both current and new passwords.");
-                return;
-            }
-            if (next.Length < 6) // simple policy; tweak later
-            {
-                ShowError("New password must be at least 6 characters.");
-                return;
-            }
-
-            var ok = await _passwords.ChangePasswordAsync(_current.UserId, curr, next);
-            if (!ok)
-            {
-                ShowError("Current password is incorrect.");
-                CurrentBox.Clear();
-                CurrentBox.Focus();
-                return;
-            }
-
-            MessageBox.Show("Password changed successfully.", "BestFlex",
-                MessageBoxButton.OK, MessageBoxImage.Information);
-            DialogResult = true;
+        private void ConfirmBox_PasswordChanged(object sender, RoutedEventArgs e)
+        {
+            if (sender is PasswordBox pb) _vm.ConfirmPassword = pb.Password ?? string.Empty;
         }
 
         private void Cancel_Click(object sender, RoutedEventArgs e) => DialogResult = false;
-
-        private void ShowError(string msg)
-        {
-            ErrorText.Text = msg;
-            ErrorText.Visibility = Visibility.Visible;
-        }
     }
 }

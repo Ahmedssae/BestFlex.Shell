@@ -1,14 +1,15 @@
 ﻿using System;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
-using System.Windows;
 using System.Windows.Input;
 using BestFlex.Application.Abstractions;
 using BestFlex.Application.Contracts.Sales;
+using BestFlex.Infrastructure.Services;
 using BestFlex.Persistence.Data;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.EntityFrameworkCore;
 
 
 namespace BestFlex.Shell.ViewModels
@@ -17,17 +18,25 @@ namespace BestFlex.Shell.ViewModels
     {
         private readonly ISalesService _sales;
         private readonly IServiceProvider _sp;
+        private readonly IPermissionService _permissions;
+        private readonly IAuditService _audit;
+        private readonly IErrorService _error;
         private bool _isBusy;
         private int? _lastInvoiceId;
+        private readonly SemaphoreSlim _loadLock = new(1, 1);
 
         public NewSaleViewModel(IServiceProvider sp, ISalesService sales)
         {
             _sp = sp ?? throw new ArgumentNullException(nameof(sp));
             _sales = sales ?? throw new ArgumentNullException(nameof(sales));
-            SaveCommand = new AsyncRelayCommand(SaveAsync, () => CanSave && !IsBusy);
-            AddLineCommand = new DelegateCommand(async () => await AddLineAsync());
-            RemoveLineCommand = new DelegateCommand<SaleLineVm>(vm => RemoveLine(vm));
-            RecalculateCommand = new DelegateCommand(() => RecalculateSubtotal());
+            _permissions = sp.GetRequiredService<IPermissionService>();
+            _audit = sp.GetRequiredService<IAuditService>();
+            _error = sp.GetRequiredService<IErrorService>();
+            
+            SaveCommand = new AsyncRelayCommand(SaveAsync, () => CanSave && !IsBusy && CanCreateSale);
+            AddLineCommand = new AsyncRelayCommand(AddLineAsync, () => !IsBusy && CanCreateSale);
+            RemoveLineCommand = new AsyncRelayCommand<SaleLineVm>(RemoveLine, _ => !IsBusy && CanCreateSale);
+            RecalculateCommand = new AsyncRelayCommand(() => { RecalculateSubtotal(); return Task.CompletedTask; }, () => !IsBusy && CanCreateSale);
         // listen for collection changes to update totals automatically
         Lines.CollectionChanged += Lines_CollectionChanged;
         // Listen for selected customer changes if we had a property; expose SelectedCustomerId
@@ -66,6 +75,9 @@ namespace BestFlex.Shell.ViewModels
 
         public int? LastInvoiceId { get => _lastInvoiceId; private set => SetProperty(ref _lastInvoiceId, value); }
 
+        // Permission properties
+        public bool CanCreateSale => _permissions.CanCreateSale();
+        
         public AsyncRelayCommand SaveCommand { get; }
         public ICommand AddLineCommand { get; }
         public ICommand RemoveLineCommand { get; }
@@ -121,13 +133,18 @@ namespace BestFlex.Shell.ViewModels
 
         public async Task LoadLookupsAsync()
         {
+            if (IsBusy) return;
+            
+            await _loadLock.WaitAsync();
             try
             {
+                if (IsBusy) return; // Double-check pattern
+                IsBusy = true;
+                
                 using var scope = _sp.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<BestFlexDbContext>();
 
                 var customers = await db.CustomerAccounts
-                    .AsNoTracking()
                     .OrderBy(c => c.Name)
                     .Select(c => new CustomerItem { Id = c.Id, Name = c.Name })
                     .ToListAsync();
@@ -136,7 +153,6 @@ namespace BestFlex.Shell.ViewModels
                 foreach (var c in customers) Customers.Add(c);
 
                 var prods = await db.Products
-                    .AsNoTracking()
                     .OrderBy(p => p.Code)
                     .Select(p => new { p.Id, p.Code, p.Name, p.StockQty })
                     .ToListAsync();
@@ -155,35 +171,24 @@ namespace BestFlex.Shell.ViewModels
                     });
                 }
             }
-            finally { await Task.CompletedTask; }
+            catch (Exception ex)
+            {
+                _error.Handle(ex, "NewSaleViewModel.LoadLookupsAsync");
+            }
+            finally
+            {
+                IsBusy = false;
+                _loadLock.Release();
+            }
         }
 
-        // Lightweight command implementation for simple synchronous actions
-        private sealed class DelegateCommand : ICommand
-        {
-            private readonly Action _act;
-            public DelegateCommand(Action act) => _act = act;
-            public bool CanExecute(object? p) => true;
-            public void Execute(object? p) => _act();
-            // Explicit add/remove to avoid unused-event warnings
-            event EventHandler? ICommand.CanExecuteChanged { add { } remove { } }
-        }
-        private sealed class DelegateCommand<T> : ICommand
-        {
-            private readonly Action<T> _act;
-            public DelegateCommand(Action<T> act) => _act = act;
-            public bool CanExecute(object? p) => true;
-            public void Execute(object? p) => _act((T)p!);
-            // Explicit add/remove to avoid unused-event warnings
-            event EventHandler? ICommand.CanExecuteChanged { add { } remove { } }
-        }
 
         private async Task<decimal?> TryResolvePriceAsync(int productId)
         {
             using var scope = _sp.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<BestFlexDbContext>();
 
-            var p = await db.Products.AsNoTracking().FirstOrDefaultAsync(x => x.Id == productId);
+            var p = await db.Products.FirstOrDefaultAsync(x => x.Id == productId);
             if (p == null) return null;
 
             var t = p.GetType();
@@ -206,13 +211,14 @@ namespace BestFlex.Shell.ViewModels
             OnValidationChanged();
         }
 
-        public void RemoveLine(SaleLineVm vm)
+        public Task RemoveLine(SaleLineVm vm)
         {
-            if (vm == null) return;
+            if (vm == null) return Task.CompletedTask;
             Lines.Remove(vm);
             // Recalculate will be triggered by collection change handler; ensure update
             RecalculateSubtotal();
             OnValidationChanged();
+            return Task.CompletedTask;
         }
 
         internal void OnLineChanged() => RecalculateSubtotal();
@@ -300,7 +306,7 @@ namespace BestFlex.Shell.ViewModels
 
             var dto = new NewSaleDto
             {
-                CustomerId = CustomerId,
+                CustomerId = SelectedCustomerId ?? CustomerId,
                 InvoiceDate = InvoiceDate,
                 Currency = Currency,
                 Notes = Notes,
@@ -315,17 +321,31 @@ namespace BestFlex.Shell.ViewModels
             try
             {
                 IsBusy = true;
+                
+                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+                
                 var invoiceId = await _sales.CreateSaleAsync(dto);
                 LastInvoiceId = invoiceId;
+
+                // Log successful sale creation
+                await _audit.LogActionAsync("SALE_CREATED", "SellingInvoice", invoiceId);
+
+                stopwatch.Stop();
+                await _audit.LogSecurityAsync("PERFORMANCE_METRIC", $"Sale creation completed in {stopwatch.ElapsedMilliseconds}ms");
 
                 // Reset for next sale (or navigate to Invoice Details)
                 Lines.Clear();
                 Notes = null;
                 OnPropertyChanged(nameof(Notes));
             }
+            catch (Exception ex)
+            {
+                _error.Handle(ex, "NewSaleViewModel.SaveAsync");
+            }
             finally
             {
                 IsBusy = false;
+                _loadLock.Release();
             }
         }
     }

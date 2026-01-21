@@ -20,13 +20,18 @@ namespace BestFlex.Infrastructure.Services
         /// <summary>
         /// Returns items whose StockQty <= threshold, ordered by StockQty then Name.
         /// </summary>
-        public Task<List<LowStockDto>> GetLowStockAsync(int threshold, int take, CancellationToken ct = default)
-            => _db.Products.AsNoTracking()
+        public async Task<List<LowStockDto>> GetLowStockAsync(int threshold, int take, CancellationToken ct = default)
+        {
+            var data = await _db.Products.AsNoTracking()
                 .Where(p => p.StockQty <= threshold)
-                .OrderBy(p => p.StockQty).ThenBy(p => p.Name)
                 .Select(p => new LowStockDto(p.Id, p.Code, p.Name, p.StockQty))
-                .Take(take)
                 .ToListAsync(ct);
+            
+            return data
+                .OrderBy(p => p.StockQty).ThenBy(p => p.Name)
+                .Take(take)
+                .ToList();
+        }
 
         public Task<int> CountLowStockAsync(int threshold, CancellationToken ct = default)
             => _db.Products.AsNoTracking()
@@ -35,12 +40,17 @@ namespace BestFlex.Infrastructure.Services
         /// <summary>
         /// Returns ALL low-stock items up to the specified cap.
         /// </summary>
-        public Task<List<LowStockDto>> GetAllLowStockAsync(int threshold, int cap, CancellationToken ct = default)
-            => _db.Products.AsNoTracking()
+        public async Task<List<LowStockDto>> GetAllLowStockAsync(int threshold, int cap, CancellationToken ct = default)
+        {
+            var data = await _db.Products.AsNoTracking()
                 .Where(p => p.StockQty <= threshold)
-                .OrderBy(p => p.StockQty).ThenBy(p => p.Name)
                 .Select(p => new LowStockDto(p.Id, p.Code, p.Name, p.StockQty))
-                .Take(cap)
                 .ToListAsync(ct);
+            
+            return data
+                .OrderBy(p => p.StockQty).ThenBy(p => p.Name)
+                .Take(cap)
+                .ToList();
+        }
     }
 }

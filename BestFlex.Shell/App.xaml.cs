@@ -1,4 +1,5 @@
 ﻿using BestFlex.Application.Abstractions;
+using BestFlex.Application.Services.Sales;
 
 using BestFlex.Infrastructure.Auth;
 using BestFlex.Infrastructure.Services;
@@ -32,6 +33,10 @@ namespace BestFlex.Shell
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
+            
+            // Setup global exception handling
+            SetupGlobalExceptionHandling();
+            
             ShutdownMode = ShutdownMode.OnExplicitShutdown;   // show Login first
 
             _host = Host.CreateDefaultBuilder()
@@ -46,6 +51,7 @@ namespace BestFlex.Shell
 
                     // Navigation service and navigable windows
                     services.AddSingleton<BestFlex.Application.Abstractions.INavigationService, BestFlex.Shell.Services.NavigationService>();
+                    services.AddSingleton<BestFlex.Shell.Abstractions.IShellNavigationService, BestFlex.Shell.Services.NavigationService>();
                     services.AddTransient<InvoiceDetailsWindow>();
                     services.AddTransient<BestFlex.Shell.Windows.LowStockWindow>();
                     services.AddTransient<BestFlex.Shell.Windows.UnpaidInvoicesWindow>();
@@ -54,10 +60,16 @@ namespace BestFlex.Shell
                     services.AddDbContext<BestFlexDbContext>(opt =>
                         opt.UseSqlite("Data Source=bestflex_local.db"));
                     services.AddSingleton<ICurrentUserService, CurrentUserService>();
+                    services.AddSingleton<IPermissionService, PermissionService>();
+                    services.AddSingleton<IErrorService, ErrorService>();
+                    services.AddSingleton<BestFlex.Application.Abstractions.IUserNotificationService, BestFlex.Shell.Services.UserNotificationService>();
+                    services.AddSingleton<ICacheService, CacheService>();
+                    services.AddScoped<IAuditService, AuditService>();
                     services.AddScoped<IUserRepository, UserRepository>();
                     services.AddScoped<PasswordService>();
                     services.AddScoped<LoginService>();
                     services.AddSingleton<IAuthorizationService, AuthorizationService>();
+                    services.AddScoped<ISalesService, SalesService>();
                     
 
 
@@ -311,6 +323,44 @@ namespace BestFlex.Shell
                 if (t != null) return t;
             }
             return Type.GetType(fullName, throwOnError: false);
+        }
+
+        private void SetupGlobalExceptionHandling()
+        {
+            // Handle UI thread exceptions
+            this.DispatcherUnhandledException += (sender, e) =>
+            {
+                var errorService = Services?.GetService<IErrorService>();
+                var notificationService = Services?.GetService<IUserNotificationService>();
+                
+                errorService?.Handle(e.Exception, "Application_DispatcherUnhandledException");
+                
+                // Show user-friendly message
+                notificationService?.ShowError("An unexpected error occurred. The application will continue running.");
+                
+                // Prevent crash
+                e.Handled = true;
+            };
+
+            // Handle task exceptions
+            TaskScheduler.UnobservedTaskException += (sender, e) =>
+            {
+                var errorService = Services?.GetService<IErrorService>();
+                errorService?.Handle(e.Exception, "TaskScheduler_UnobservedTaskException");
+                
+                // Prevent crash
+                e.SetObserved();
+            };
+
+            // Handle domain exceptions
+            AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
+            {
+                if (e.ExceptionObject is Exception ex)
+                {
+                    var errorService = Services?.GetService<IErrorService>();
+                    errorService?.Handle(ex, "AppDomain_UnhandledException");
+                }
+            };
         }
     }
 }

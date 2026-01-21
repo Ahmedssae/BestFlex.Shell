@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using BestFlex.Application.Abstractions;
 using BestFlex.Persistence.Data;
 using BestFlex.Shell.Printing;
 using Microsoft.EntityFrameworkCore;
@@ -15,22 +16,31 @@ namespace BestFlex.Shell
 {
     public partial class MainWindow : Window
     {
+        private readonly IPermissionService _permissions;
+
         public MainWindow()
         {
             InitializeComponent();
+            
+            var app = (App)System.Windows.Application.Current;
+            _permissions = app.Services.GetRequiredService<IPermissionService>();
+            DataContext = this;
 
             // Ctrl+Shift+P → Reprint last invoice
             var cmd = new RoutedCommand("ReprintLastInvoice", typeof(MainWindow));
             this.InputBindings.Add(new KeyBinding(cmd, new KeyGesture(Key.P, ModifierKeys.Control | ModifierKeys.Shift)));
             this.CommandBindings.Add(new CommandBinding(cmd, async (_, __) => await ReprintLastInvoiceAsync()));
 
-            // Hide restricted nav entries once the visual tree is ready
+            // Hide restricted nav entries once visual tree is ready
             this.Loaded += (_, __) =>
             {
                 if (!DetectIsAdmin())
                     HideTemplateEntries();
             };
         }
+
+        // Permission properties for menu binding
+        public bool CanManageSettings => _permissions.CanManageSettings();
 
         private async Task ReprintLastInvoiceAsync()
         {
@@ -184,7 +194,7 @@ namespace BestFlex.Shell
         }
         // -----------------------------------------------------------------------------------------
 
-        // ---- Sidebar guard: hide any visual whose Tag matches the Templates route or whose header/text says Templates ----
+        // ---- Sidebar guard: hide any visual whose Tag matches Templates route or whose header/text says Templates ----
         private void HideTemplateEntries()
         {
             try
@@ -213,7 +223,7 @@ namespace BestFlex.Shell
             }
             catch
             {
-                // best-effort; never break the shell
+                // best-effort; never break shell
             }
         }
 
@@ -231,6 +241,64 @@ namespace BestFlex.Shell
                     if (c is T t) yield return t;
                     stack.Push(c);
                 }
+            }
+        }
+
+        private void ChangePassword_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var app = (App)System.Windows.Application.Current;
+                var window = app.Services.GetRequiredService<ChangePasswordWindow>();
+                window.Owner = this;
+                var result = window.ShowDialog();
+                
+                if (result == true)
+                {
+                    MessageBox.Show("Password changed successfully!", "Success",
+                        MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to open change password window: {ex.Message}", "Error",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void SignOut_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var app = (App)System.Windows.Application.Current;
+                var currentUser = app.Services.GetRequiredService<BestFlex.Application.Abstractions.ICurrentUserService>();
+                currentUser.SignOut();
+                
+                MessageBox.Show("You have been signed out.", "Signed Out",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                
+                System.Windows.Application.Current.Shutdown();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to sign out: {ex.Message}", "Error",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void OpenSettings_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var app = (App)System.Windows.Application.Current;
+                var window = app.Services.GetRequiredService<SettingsWindow>();
+                window.Owner = this;
+                window.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to open settings: {ex.Message}", "Error",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
     }

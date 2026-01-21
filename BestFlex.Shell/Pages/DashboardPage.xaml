@@ -60,7 +60,8 @@
                                 <ComboBoxItem Content="50"/>
                             </ComboBox>
 
-                            <Button Content="Refresh" Click="Refresh_Click" />
+                            <Button Content="Refresh" Click="Refresh_Click" 
+                                    IsEnabled="{Binding CanViewLowStock}"/>
                         </StackPanel>
                     </DockPanel>
 
@@ -77,7 +78,8 @@
 
                     <DockPanel Grid.Row="3" Margin="0,8,0,0">
                         <TextBlock x:Name="txtLowSummary" VerticalAlignment="Center" />
-                        <Button Content="Open Full List" DockPanel.Dock="Right" Click="OpenLowFull_Click" />
+                        <Button Content="Open Full List" DockPanel.Dock="Right" Click="OpenLowFull_Click" 
+                                IsEnabled="{Binding CanViewLowStock}"/>
                     </DockPanel>
                 </Grid>
             </Border>
@@ -102,7 +104,8 @@
                                 <ComboBoxItem Content="20"/>
                                 <ComboBoxItem Content="50"/>
                             </ComboBox>
-                            <Button Content="Refresh" Click="RefreshDebt_Click"/>
+                            <Button Content="Refresh" Click="RefreshDebt_Click"
+                                    IsEnabled="{Binding CanViewDebt}"/>
                         </StackPanel>
                     </DockPanel>
 
@@ -120,7 +123,8 @@
 
                     <DockPanel Grid.Row="3" Margin="0,8,0,0">
                         <TextBlock x:Name="txtDebtSummary" VerticalAlignment="Center" />
-                        <Button Content="Open Details" DockPanel.Dock="Right" Click="OpenDebt_Click" />
+                        <Button Content="Open Details" DockPanel.Dock="Right" Click="OpenDebt_Click" 
+                                IsEnabled="{Binding CanViewDebt}"/>
                     </DockPanel>
                 </Grid>
             </Border>

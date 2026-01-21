@@ -3,6 +3,8 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Input;
+using BestFlex.Application.Abstractions;
 using BestFlex.Infrastructure.Services;
 using BestFlex.Persistence.Data;
 using Microsoft.EntityFrameworkCore;
@@ -19,13 +21,41 @@ namespace BestFlex.Shell.ViewModels
     public sealed class DashboardViewModel : ViewModelBase
     {
         private readonly IServiceProvider _sp;
+        private readonly IPermissionService _permissions;
+        private readonly IAuditService _audit;
+        private readonly IErrorService _error;
         private readonly BestFlex.Application.Abstractions.INavigationService _nav;
         private readonly Infrastructure.PaginationState _customerPaging = new();
         private readonly Infrastructure.PaginationState _lowStockPaging = new();
+        private readonly Infrastructure.PaginationState _debtPaging = new();
+        private readonly AsyncRelayCommand _refreshCmd;
+        private readonly AsyncRelayCommand _refreshLowStockCmd;
+        private readonly AsyncRelayCommand _refreshDebtCmd;
+        private readonly AsyncRelayCommand _loadAllCmd;
+        private readonly AsyncRelayCommand _openLowStockCmd;
+        private readonly AsyncRelayCommand _openDebtCmd;
+        private readonly SemaphoreSlim _loadLock = new(1, 1);
+        
+        private int _currentThreshold = 10;
+        private int _currentLowTopN = 10;
+        private int _currentDebtTopN = 10;
+        private DateTime _currentFrom = DateTime.Today.AddDays(-30);
+        private DateTime _currentTo = DateTime.Today;
+
         public DashboardViewModel(IServiceProvider sp, BestFlex.Application.Abstractions.INavigationService nav)
         {
             _sp = sp ?? throw new ArgumentNullException(nameof(sp));
             _nav = nav ?? throw new ArgumentNullException(nameof(nav));
+            _permissions = sp.GetRequiredService<IPermissionService>();
+            _audit = sp.GetRequiredService<IAuditService>();
+            _error = sp.GetRequiredService<IErrorService>();
+            
+            _refreshCmd = new AsyncRelayCommand(RefreshAsync, () => !IsBusy && CanViewDashboard);
+            _refreshLowStockCmd = new AsyncRelayCommand(RefreshLowStockAsync, () => !IsBusy && CanViewLowStock);
+            _refreshDebtCmd = new AsyncRelayCommand(RefreshDebtAsync, () => !IsBusy && CanViewDebt);
+            _loadAllCmd = new AsyncRelayCommand(LoadAllAsync, () => !IsBusy && CanViewDashboard);
+            _openLowStockCmd = new AsyncRelayCommand(OpenLowStock, () => !IsBusy && CanViewLowStock);
+            _openDebtCmd = new AsyncRelayCommand(OpenDebt, () => !IsBusy && CanViewDebt);
         }
 
         private bool _isBusy;
@@ -40,10 +70,26 @@ namespace BestFlex.Shell.ViewModels
         private decimal _totalReceivables;
         public decimal TotalReceivables { get => _totalReceivables; private set => SetProperty(ref _totalReceivables, value); }
 
+        // Permission properties
+        public bool CanViewDashboard => _permissions.CanViewDashboard();
+        public bool CanViewLowStock => _permissions.CanViewLowStock();
+        public bool CanViewDebt => _permissions.CanViewDebt();
+        
+        // Commands
+        public ICommand RefreshCommand => _refreshCmd;
+        public ICommand RefreshLowStockCommand => _refreshLowStockCmd;
+        public ICommand RefreshDebtCommand => _refreshDebtCmd;
+        public ICommand LoadAllCommand => _loadAllCmd;
+        public ICommand OpenLowStockCommand => _openLowStockCmd;
+        public ICommand OpenDebtCommand => _openDebtCmd;
+        
         public ObservableCollection<ChartPointVm> SalesByDay { get; } = new();
         public ObservableCollection<ChartPointVm> SalesByCustomer { get; } = new();
-        public int CustomerPageIndex { get => _customerPaging.PageIndex; set { _customerPaging.Update(Math.Max(1,value), _customerPaging.PageSize, _customerPaging.TotalCount); OnPropertyChanged(nameof(CustomerPageIndex)); } }
+        public int CustomerPageIndex { get => _customerPaging.PageIndex; set { _customerPaging.Update(Math.Max(1,value), _customerPaging.PageSize, _customerPaging.TotalCount); OnPropertyChanged(nameof(CustomerPageIndex)); OnPropertyChanged(nameof(CustomerPageIndicatorText)); } }
         public int CustomerPageSize { get => _customerPaging.PageSize; set { _customerPaging.Update(1, Math.Max(1,value), _customerPaging.TotalCount); OnPropertyChanged(nameof(CustomerPageSize)); } }
+        
+        public int CustomerTotalPages => Math.Max(1, (int)Math.Ceiling(_customerPaging.TotalCount / (double)CustomerPageSize));
+        public string CustomerPageIndicatorText => $"Page {CustomerPageIndex} of {CustomerTotalPages}";
 
         // Keep low stock / debt collections for the dashboard UI
         public ObservableCollection<InventoryReadService.LowStockDto> LowStock { get; } = new();
@@ -55,10 +101,15 @@ namespace BestFlex.Shell.ViewModels
         public async Task LoadAsync(DateTime from, DateTime to, CancellationToken ct = default)
         {
             if (IsBusy) return;
+            
+            await _loadLock.WaitAsync(ct);
             try
             {
+                if (IsBusy) return; // Double-check pattern
                 IsBusy = true;
 
+                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+                
                 using var scope = _sp.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<BestFlexDbContext>();
 
@@ -113,10 +164,20 @@ namespace BestFlex.Shell.ViewModels
                 foreach (var c in byCustomer)
                     SalesByCustomer.Add(new ChartPointVm { Label = c.Name ?? string.Empty, Total = c.Total });
                 _customerPaging.Update(_customerPaging.PageIndex, custTake, _customerPaging.TotalCount);
+                
+                stopwatch.Stop();
+                await _audit.LogActionAsync("DASHBOARD_LOAD", null, null);
+                // Log timing details via audit service details field
+                await _audit.LogSecurityAsync("PERFORMANCE_METRIC", $"Dashboard load completed in {stopwatch.ElapsedMilliseconds}ms");
+            }
+            catch (Exception ex)
+            {
+                _error.Handle(ex, "DashboardViewModel.LoadAsync");
             }
             finally
             {
                 IsBusy = false;
+                _loadLock.Release();
             }
         }
 
@@ -126,7 +187,7 @@ namespace BestFlex.Shell.ViewModels
             var db = scope.ServiceProvider.GetRequiredService<BestFlexDbContext>();
             var svc = new InventoryReadService(db);
 
-            var list = await svc.GetLowStockAsync(threshold, topN, ct);
+                var list = await svc.GetLowStockAsync(threshold, topN, ct);
             var total = await svc.CountLowStockAsync(threshold, ct);
 
             LowStock.Clear();
@@ -157,6 +218,44 @@ namespace BestFlex.Shell.ViewModels
             await ReloadLowAsync(threshold, lowTopN, ct);
             await ReloadDebtAsync(debtTopN, ct);
             await LoadAsync(from, to, ct);
+        }
+
+        private async Task RefreshAsync()
+        {
+            await LoadAsync(_currentFrom, _currentTo);
+        }
+
+        private async Task RefreshLowStockAsync()
+        {
+            await ReloadLowAsync(_currentThreshold, _currentLowTopN);
+        }
+
+        private async Task RefreshDebtAsync()
+        {
+            await ReloadDebtAsync(_currentDebtTopN);
+        }
+
+        private async Task LoadAllAsync()
+        {
+            await ReloadAllAsync(_currentThreshold, _currentLowTopN, _currentDebtTopN, _currentFrom, _currentTo);
+        }
+
+        private async Task OpenLowStock()
+        {
+            if (CanViewLowStock)
+            {
+                await _audit.LogNavigationAsync("LowStock");
+                _nav.OpenLowStock(_currentThreshold);
+            }
+        }
+
+        private async Task OpenDebt()
+        {
+            if (CanViewDebt)
+            {
+                await _audit.LogNavigationAsync("UnpaidInvoices");
+                _nav.OpenUnpaidInvoices(_currentDebtTopN);
+            }
         }
     }
 }

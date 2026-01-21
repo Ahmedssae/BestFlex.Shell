@@ -3,6 +3,8 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Input;
+using BestFlex.Application.Abstractions;
 using BestFlex.Infrastructure.Services;
 using BestFlex.Persistence.Data;
 using Microsoft.Extensions.DependencyInjection;
@@ -12,18 +14,48 @@ namespace BestFlex.Shell.ViewModels
     public sealed class UnpaidInvoicesViewModel : ViewModelBase
     {
         private readonly IServiceProvider _sp;
+        private readonly IPermissionService _permissions;
+        private readonly IAuditService _audit;
+        private readonly IErrorService _error;
         private readonly BestFlex.Application.Abstractions.INavigationService _nav;
+        private readonly AsyncRelayCommand _refreshCmd;
+        private readonly AsyncRelayCommand<int> _loadInvoicesCmd;
+        private readonly AsyncRelayCommand<int> _openInvoiceCmd;
         private readonly Infrastructure.PaginationState _paging = new();
+        private int _currentTopN = 10;
+        private readonly SemaphoreSlim _loadLock = new(1, 1);
 
         public UnpaidInvoicesViewModel(IServiceProvider sp, BestFlex.Application.Abstractions.INavigationService nav)
         {
             _sp = sp ?? throw new ArgumentNullException(nameof(sp));
             _nav = nav ?? throw new ArgumentNullException(nameof(nav));
+            _permissions = sp.GetRequiredService<IPermissionService>();
+            _audit = sp.GetRequiredService<IAuditService>();
+            _error = sp.GetRequiredService<IErrorService>();
+            
+            _refreshCmd = new AsyncRelayCommand(async () => await LoadAsync(_currentTopN), () => !IsBusy && CanViewDebt);
+            _loadInvoicesCmd = new AsyncRelayCommand<int>(async id => await LoadInvoicesForCustomerAsync(id), id => id > 0 && CanViewDebt);
+            _openInvoiceCmd = new AsyncRelayCommand<int>(async id => 
+            {
+                await _audit.LogActionAsync("INVOICE_OPENED", "SellingInvoice", id);
+                _nav.OpenInvoiceDetails(id);
+            }, id => id > 0 && CanOpenInvoice);
         }
 
         public ObservableCollection<UnpaidCustomerVm> Items { get; } = new();
-        public int PageIndex { get => _paging.PageIndex; set { _paging.Update(Math.Max(1,value), _paging.PageSize, _paging.TotalCount); OnPropertyChanged(nameof(PageIndex)); } }
+        public int PageIndex { get => _paging.PageIndex; set { _paging.Update(Math.Max(1,value), _paging.PageSize, _paging.TotalCount); OnPropertyChanged(nameof(PageIndex)); OnPropertyChanged(nameof(PageIndicatorText)); } }
         public int PageSize { get => _paging.PageSize; set { _paging.Update(1, Math.Max(1,value), _paging.TotalCount); OnPropertyChanged(nameof(PageSize)); } }
+        
+        public int TotalPages => Math.Max(1, (int)Math.Ceiling(Items.Count / (double)PageSize));
+        public string PageIndicatorText => $"Page {PageIndex} of {TotalPages}";
+        
+        // Permission properties
+        public bool CanViewDebt => _permissions.CanViewDebt();
+        public bool CanOpenInvoice => _permissions.CanOpenInvoice();
+        
+        public ICommand RefreshCommand => _refreshCmd;
+        public ICommand LoadInvoicesCommand => _loadInvoicesCmd;
+        public ICommand OpenInvoiceCommand => _openInvoiceCmd;
 
         private decimal _totalOutstanding;
         public decimal TotalOutstanding { get => _totalOutstanding; private set => SetProperty(ref _totalOutstanding, value); }
@@ -34,9 +66,13 @@ namespace BestFlex.Shell.ViewModels
         public async Task LoadAsync(int topN, CancellationToken ct = default)
         {
             if (IsBusy) return;
+            
+            await _loadLock.WaitAsync(ct);
             try
             {
+                if (IsBusy) return; // Double-check pattern
                 IsBusy = true;
+                _currentTopN = topN;
 
                 using var scope = _sp.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<BestFlexDbContext>();
@@ -60,10 +96,17 @@ namespace BestFlex.Shell.ViewModels
 
                 TotalOutstanding = Items.Sum(x => x.Amount);
                 _paging.Update(_paging.PageIndex, take, Items.Count);
+                OnPropertyChanged(nameof(TotalPages));
+                OnPropertyChanged(nameof(PageIndicatorText));
+            }
+            catch (Exception ex)
+            {
+                _error.Handle(ex, "UnpaidInvoicesViewModel.LoadAsync");
             }
             finally
             {
                 IsBusy = false;
+                _loadLock.Release();
             }
         }
 

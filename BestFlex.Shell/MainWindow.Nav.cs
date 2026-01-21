@@ -160,12 +160,22 @@ namespace BestFlex.Shell
 
             foreach (var fullName in candidates)
             {
-                var t = FindType(fullName); // uses helper in MainWindow.Events.cs
+                var t = FindType(fullName);
                 if (t == null) continue;
 
                 var obj = sp.GetService(t) as FrameworkElement
                           ?? Activator.CreateInstance(t) as FrameworkElement;
                 if (obj != null) return obj;
+            }
+            return null;
+        }
+
+        private static Type? FindType(string fullName)
+        {
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                var t = asm.GetType(fullName, throwOnError: false);
+                if (t != null) return t;
             }
             return null;
         }

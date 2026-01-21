@@ -20,6 +20,7 @@ namespace BestFlex.Persistence.Data
         public DbSet<PrintTemplate> PrintTemplates => Set<PrintTemplate>();
         public DbSet<InvoiceNoSequence> InvoiceNoSequences => Set<InvoiceNoSequence>();
         public DbSet<PrintTemplateVersion> PrintTemplateVersions => Set<PrintTemplateVersion>();
+        public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

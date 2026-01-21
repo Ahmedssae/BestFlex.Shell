@@ -1,16 +1,12 @@
-﻿using System;
-using System.Collections.ObjectModel;
-using System.ComponentModel;
-using System.Runtime.CompilerServices;
+﻿using System.Collections.ObjectModel;
 using System.Threading.Tasks;
 using BestFlex.Persistence.Data;
 using Microsoft.EntityFrameworkCore;
 using BestFlex.Application.Abstractions;
-using BestFlex.Shell; // for CompanySettings/PrintTemplateSettings types if needed via root namespace
 
 namespace BestFlex.Shell.ViewModels
 {
-    public class InvoiceDetailsViewModel : INotifyPropertyChanged
+    public class InvoiceDetailsViewModel : ViewModelBase
     {
         private readonly BestFlexDbContext _db;
 
@@ -27,9 +23,6 @@ namespace BestFlex.Shell.ViewModels
 
         public ObservableCollection<LineRow> Lines { get; } = new();
 
-        public event PropertyChangedEventHandler? PropertyChanged;
-        void OnPropertyChanged([CallerMemberName] string? n = null)
-            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
 
         public async Task LoadAsync(int invoiceId)
         {

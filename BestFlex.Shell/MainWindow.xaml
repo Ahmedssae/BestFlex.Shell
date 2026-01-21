@@ -21,7 +21,7 @@
                 <MenuItem Header="Change _Password" Click="ChangePassword_Click"/>
                 <Separator/>
                 <MenuItem Header="_Sign Out" Click="SignOut_Click"/>
-                <MenuItem Header="_Settings" Width="120" Click="OpenSettings_Click"/>
+                <MenuItem Header="_Settings" Width="120" Click="OpenSettings_Click" IsEnabled="{Binding CanManageSettings}"/>
             </MenuItem>
         </Menu>
 

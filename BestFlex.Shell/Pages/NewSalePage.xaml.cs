@@ -15,7 +15,7 @@ namespace BestFlex.Shell.Pages
         {
             InitializeComponent();
             var app = (App)System.Windows.Application.Current;
-            var sales = app.Services.GetRequiredService<BestFlex.Application.Abstractions.ISalesService>();
+            var sales = app.Services.GetRequiredService<BestFlex.Application.Abstractions.ISalesService>()!;
             _vm = new BestFlex.Shell.ViewModels.NewSaleViewModel(app.Services, sales);
             DataContext = _vm;
         }
