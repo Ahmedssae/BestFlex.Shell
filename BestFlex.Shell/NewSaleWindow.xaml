@@ -10,26 +10,27 @@
         </StackPanel>
 
         <StackPanel Orientation="Horizontal" DockPanel.Dock="Top" Margin="0,0,0,8">
-            <TextBox Width="260"
-         Text="{Binding ProductInput, UpdateSourceTrigger=PropertyChanged}" />
+            <ComboBox Width="260" ItemsSource="{Binding Products}" SelectedItem="{Binding SelectedProduct}"
+                      DisplayMemberPath="Display" IsEditable="True" 
+                      Text="{Binding ProductInput, UpdateSourceTrigger=PropertyChanged}" />
 
-            <TextBlock Text=" Qty:" VerticalAlignment="Center" Margin="8,0,4,0"/>
-            <TextBox Width="60" Text="{Binding Qty}" />
-            <Button Content="Add Line" Margin="12,0,0,0" Click="AddLine_Click"/>
+            <TextBlock Text="Qty:" VerticalAlignment="Center" Margin="8,0,4,0"/>
+            <TextBox Width="60" Text="{Binding Qty, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}" />
+            <Button Content="Add Line" Margin="12,0,0,0" Command="{Binding AddLineCommand}"/>
         </StackPanel>
 
         <DataGrid ItemsSource="{Binding Lines}" AutoGenerateColumns="False" Width="461">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Code" Binding="{Binding ProductCode}" Width="100"/>
                 <DataGridTextColumn Header="Name" Binding="{Binding ProductName}" Width="*"/>
-                <DataGridTextColumn Header="Qty" Binding="{Binding Qty}" Width="80"/>
+                <DataGridTextColumn Header="Qty" Binding="{Binding Quantity}" Width="80"/>
                 <DataGridTextColumn Header="Unit Price" Binding="{Binding UnitPrice}" Width="120"/>
-                <DataGridTextColumn Header="Total" Binding="{Binding Total}" Width="120"/>
+                <DataGridTextColumn Header="Total" Binding="{Binding LineTotal}" Width="120"/>
             </DataGrid.Columns>
         </DataGrid>
 
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
-            <Button Content="Save" Width="100" Margin="0,0,8,0" Click="Save_Click"/>
+            <Button Content="Save" Width="100" Margin="0,0,8,0" Command="{Binding SaveCommand}"/>
             <Button Content="Close" Width="100" Click="Close_Click"/>
         </StackPanel>
     </DockPanel>

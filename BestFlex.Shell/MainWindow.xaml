@@ -18,10 +18,10 @@
         <!-- === Top Menu === -->
         <Menu DockPanel.Dock="Top" Background="#2f343d" Foreground="White">
             <MenuItem Header="_Account">
-                <MenuItem Header="Change _Password" Click="ChangePassword_Click"/>
+                <MenuItem Header="Change _Password" Command="{Binding ChangePasswordCommand}"/>
                 <Separator/>
-                <MenuItem Header="_Sign Out" Click="SignOut_Click"/>
-                <MenuItem Header="_Settings" Width="120" Click="OpenSettings_Click" IsEnabled="{Binding CanManageSettings}"/>
+                <MenuItem Header="_Sign Out" Command="{Binding SignOutCommand}"/>
+                <MenuItem Header="_Settings" Width="120" Command="{Binding OpenSettingsCommand}" IsEnabled="{Binding CanManageSettings}"/>
             </MenuItem>
         </Menu>
 

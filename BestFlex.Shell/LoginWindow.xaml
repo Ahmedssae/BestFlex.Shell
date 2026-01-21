@@ -35,7 +35,8 @@
             </Grid.ColumnDefinitions>
 
             <TextBlock Text="Username:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-            <TextBox x:Name="UsernameBox" Grid.Column="1" MinWidth="200"/>
+            <TextBox x:Name="UsernameBox" Grid.Column="1" MinWidth="200"
+                     Text="{Binding Username, UpdateSourceTrigger=PropertyChanged}"/>
         </Grid>
 
         <!-- Password row -->
@@ -47,19 +48,19 @@
 
             <TextBlock Text="Password:" VerticalAlignment="Center" Margin="0,0,8,0"/>
             <!-- PasswordBox cannot bind Password securely by default; read it in code-behind -->
-            <PasswordBox x:Name="PasswordBox" Grid.Column="1" MinWidth="200"/>
+            <PasswordBox x:Name="PasswordBox" Grid.Column="1" MinWidth="200" PasswordChanged="PasswordBox_OnPasswordChanged"/>
         </Grid>
 
         <TextBlock x:Name="ErrorText"
                    Grid.Row="3"
                    Foreground="Tomato"
-                   Visibility="Collapsed" />
+                   Text="{Binding ErrorMessage}" />
 
         <StackPanel Grid.Row="4"
                     Orientation="Horizontal"
                     HorizontalAlignment="Right"
                     Margin="0,12,0,0">
-            <Button Content="Login" Width="90" Margin="0,0,8,0" Click="Login_Click"/>
+            <Button Content="Login" Width="90" Margin="0,0,8,0" Command="{Binding LoginCommand}"/>
             <Button Content="Cancel" Width="90" Click="Cancel_Click"/>
         </StackPanel>
     </Grid>

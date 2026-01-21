@@ -18,14 +18,16 @@ namespace BestFlex.Shell.Services
         private readonly IAuditService _audit;
         private readonly IErrorService _error;
         private readonly IUserNotificationService _notification;
+        private readonly BestFlex.Application.Abstractions.ISalesModuleGate _salesGate;
         private readonly ConcurrentDictionary<string, SemaphoreSlim> _navigationLocks = new();
 
-        public NavigationService(IServiceProvider sp, IAuditService audit, IErrorService error, IUserNotificationService notification)
+        public NavigationService(IServiceProvider sp, IAuditService audit, IErrorService error, IUserNotificationService notification, BestFlex.Application.Abstractions.ISalesModuleGate salesGate)
         {
             _sp = sp ?? throw new ArgumentNullException(nameof(sp));
             _audit = audit ?? throw new ArgumentNullException(nameof(audit));
             _error = error ?? throw new ArgumentNullException(nameof(error));
             _notification = notification ?? throw new ArgumentNullException(nameof(notification));
+            _salesGate = salesGate ?? throw new ArgumentNullException(nameof(salesGate));
         }
         
         public void OpenQuickAddCustomer(Window? owner = null)
@@ -41,7 +43,8 @@ namespace BestFlex.Shell.Services
             }
             catch (Exception ex)
             {
-                _error.Handle(ex, "NavigationService.OpenQuickAddCustomer");
+                var unwrapped = ReflectionExceptionUnwrapper.Unwrap(ex);
+                _error.Handle(unwrapped, "NavigationService.OpenQuickAddCustomer");
             }
         }
 
@@ -67,8 +70,9 @@ namespace BestFlex.Shell.Services
                 }
                 catch (Exception ex)
                 {
-                    _error.Handle(ex, "NavigationService.OpenInvoiceDetails");
-                    _notification.ShowError("Failed to open invoice details.");
+                    var unwrapped = ReflectionExceptionUnwrapper.Unwrap(ex);
+                    _error.Handle(unwrapped, "NavigationService.OpenInvoiceDetails");
+                    _notification.ShowError(ReflectionExceptionUnwrapper.GetUserFriendlyMessage(unwrapped));
                 }
                 finally
                 {
@@ -115,6 +119,34 @@ namespace BestFlex.Shell.Services
             {
                 _ = Task.Run(async () => await _audit.LogNavigationAsync("NewSale"));
                 
+                // Module gate check BEFORE any other logic
+                if (!_salesGate.IsEnabled())
+                {
+                    throw new BestFlex.Application.UserFriendlyException("Sales module is currently under maintenance.");
+                }
+
+                // Centralized module policy enforcement (Phase 14)
+                var _modulePolicy = _sp.GetService<BestFlex.Application.Abstractions.IModulePolicyService>();
+                _modulePolicy?.ValidateEnabled(BestFlex.Application.Abstractions.ErpModule.Sales);
+                _sp.GetRequiredService<BestFlex.Application.Abstractions.ISystemSafetyPolicy>()
+                   .EnsureOperationAllowed(BestFlex.Application.Abstractions.KillSwitch.Sales, "New Sale");
+
+                // Check authorization BEFORE navigation
+                var authorizationService = _sp.GetService<IAuthorizationService>();
+                if (authorizationService == null)
+                {
+                    _notification.ShowError("Authorization service not available. Please contact administrator.");
+                    return;
+                }
+                
+                var hasPermission = authorizationService.HasPermissionAsync(Application.Abstractions.Permission.CreateSale).Result;
+                if (!hasPermission)
+                {
+                    var reason = authorizationService.GetPermissionDeniedReasonAsync(Application.Abstractions.Permission.CreateSale).Result;
+                    _notification.ShowError(reason ?? "You do not have permission to create sales.");
+                    return;
+                }
+                
                 var currentApp = System.Windows.Application.Current;
                 if (currentApp == null) return;
                 var app = (App)currentApp;
@@ -124,8 +156,9 @@ namespace BestFlex.Shell.Services
             }
             catch (Exception ex)
             {
-                _error.Handle(ex, "NavigationService.OpenNewSale");
-                _notification.ShowError("Failed to open new sale.");
+                var unwrapped = ReflectionExceptionUnwrapper.Unwrap(ex);
+                _error.Handle(unwrapped, "NavigationService.OpenNewSale");
+                _notification.ShowError(ReflectionExceptionUnwrapper.GetUserFriendlyMessage(unwrapped));
             }
         }
 
@@ -144,8 +177,9 @@ namespace BestFlex.Shell.Services
             }
             catch (Exception ex)
             {
-                _error.Handle(ex, "NavigationService.OpenLowStock");
-                _notification.ShowError("Failed to open low stock window.");
+                var unwrapped = ReflectionExceptionUnwrapper.Unwrap(ex);
+                _error.Handle(unwrapped, "NavigationService.OpenLowStock");
+                _notification.ShowError(ReflectionExceptionUnwrapper.GetUserFriendlyMessage(unwrapped));
             }
         }
 
@@ -164,8 +198,9 @@ namespace BestFlex.Shell.Services
             }
             catch (Exception ex)
             {
-                _error.Handle(ex, "NavigationService.OpenUnpaidInvoices");
-                _notification.ShowError("Failed to open unpaid invoices.");
+                var unwrapped = ReflectionExceptionUnwrapper.Unwrap(ex);
+                _error.Handle(unwrapped, "NavigationService.OpenUnpaidInvoices");
+                _notification.ShowError(ReflectionExceptionUnwrapper.GetUserFriendlyMessage(unwrapped));
             }
         }
         

@@ -27,10 +27,10 @@ namespace BestFlex.Shell.Pages
             set { if (_themeText != value) { _themeText = value; OnPropertyChanged(); } }
         }
 
-        public DashboardPage()
+        public DashboardPage(ViewModels.DashboardViewModel vm)
         {
             InitializeComponent();
-            _vm = ((App)System.Windows.Application.Current).Services.GetRequiredService<ViewModels.DashboardViewModel>();
+            _vm = vm ?? throw new ArgumentNullException(nameof(vm));
             gridLow.ItemsSource = _vm.LowStock;
             gridDebt.ItemsSource = _vm.TopDebt;
 

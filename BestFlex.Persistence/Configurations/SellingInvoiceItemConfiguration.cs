@@ -19,7 +19,7 @@ namespace BestFlex.Persistence.Configurations
 
             // Relationship to SellingInvoice
             b.HasOne(x => x.SellingInvoice)
-             .WithMany(i => i.Items)
+             .WithMany(i => i.SellingInvoiceItems)
              .HasForeignKey(x => x.SellingInvoiceId)
              .OnDelete(DeleteBehavior.Cascade); // delete items when invoice is deleted
 

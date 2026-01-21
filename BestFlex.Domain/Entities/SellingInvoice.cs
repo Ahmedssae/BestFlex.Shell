@@ -17,6 +17,6 @@ namespace BestFlex.Domain.Entities
         public CustomerAccount CustomerAccount { get; set; } = default!;
 
         // Navigation property: items inside the invoice
-        public ICollection<SellingInvoiceItem> Items { get; set; } = new List<SellingInvoiceItem>();
+        public ICollection<SellingInvoiceItem> SellingInvoiceItems { get; set; } = new List<SellingInvoiceItem>();
     }
 }

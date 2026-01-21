@@ -15,10 +15,10 @@ namespace BestFlex.Shell.Pages
     {
         private readonly TemplateDesignerPageViewModel _vm;
 
-        public TemplateDesignerPage(IServiceProvider sp)
+        public TemplateDesignerPage(TemplateDesignerPageViewModel vm)
         {
             InitializeComponent();
-            _vm = new TemplateDesignerPageViewModel(sp);
+            _vm = vm ?? throw new ArgumentNullException(nameof(vm));
 
             this.Loaded += async (_, __) =>
             {

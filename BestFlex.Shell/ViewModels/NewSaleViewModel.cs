@@ -1,16 +1,15 @@
 ﻿using System;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows;
 using System.Windows.Input;
 using BestFlex.Application.Abstractions;
 using BestFlex.Application.Contracts.Sales;
-using BestFlex.Infrastructure.Services;
-using BestFlex.Persistence.Data;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.EntityFrameworkCore;
-
+using Microsoft.Extensions.Logging;
 
 namespace BestFlex.Shell.ViewModels
 {
@@ -21,29 +20,126 @@ namespace BestFlex.Shell.ViewModels
         private readonly IPermissionService _permissions;
         private readonly IAuditService _audit;
         private readonly IErrorService _error;
+        private readonly ILogger<NewSaleViewModel> _logger;
+        private readonly IAuthorizationService _authorization;
         private bool _isBusy;
         private int? _lastInvoiceId;
         private readonly SemaphoreSlim _loadLock = new(1, 1);
+        private bool _isFeatureAvailable;
+        private string? _featureUnavailableReason;
+        private bool _isExecuting;
+        private bool _canCreateSale;
 
-        public NewSaleViewModel(IServiceProvider sp, ISalesService sales)
+        public Guid OperationId { get; } = Guid.NewGuid();
+
+        public bool IsExecuting
         {
-            _sp = sp ?? throw new ArgumentNullException(nameof(sp));
-            _sales = sales ?? throw new ArgumentNullException(nameof(sales));
-            _permissions = sp.GetRequiredService<IPermissionService>();
-            _audit = sp.GetRequiredService<IAuditService>();
-            _error = sp.GetRequiredService<IErrorService>();
-            
-            SaveCommand = new AsyncRelayCommand(SaveAsync, () => CanSave && !IsBusy && CanCreateSale);
-            AddLineCommand = new AsyncRelayCommand(AddLineAsync, () => !IsBusy && CanCreateSale);
-            RemoveLineCommand = new AsyncRelayCommand<SaleLineVm>(RemoveLine, _ => !IsBusy && CanCreateSale);
-            RecalculateCommand = new AsyncRelayCommand(() => { RecalculateSubtotal(); return Task.CompletedTask; }, () => !IsBusy && CanCreateSale);
-        // listen for collection changes to update totals automatically
-        Lines.CollectionChanged += Lines_CollectionChanged;
-        // Listen for selected customer changes if we had a property; expose SelectedCustomerId
+            get => _isExecuting;
+            private set => SetProperty(ref _isExecuting, value);
         }
 
+        public bool CanCreateSale => _canCreateSale && !IsBusy && !IsExecuting;
+
+        private bool CanSave() => SelectedCustomerId.HasValue && Lines.All(l => l.ProductId > 0 && l.Quantity > 0 && l.UnitPrice >= 0) && !IsExecuting && !IsBusy && HasCreateSalePermission;
+
+        public NewSaleViewModel(
+            IServiceProvider sp,
+            ISalesService sales,
+            IPermissionService permissions,
+            IAuditService audit,
+            IErrorService error,
+            ILogger<NewSaleViewModel> logger,
+            IAuthorizationService authorization)
+        {
+            // CORE REQUIRED dependencies - no GetService, no null checks
+            _sp = sp ?? throw new ArgumentNullException(nameof(sp));
+            _sales = sales ?? throw new ArgumentNullException(nameof(sales));
+            _permissions = permissions ?? throw new ArgumentNullException(nameof(permissions));
+            _audit = audit ?? throw new ArgumentNullException(nameof(audit));
+            _error = error ?? throw new ArgumentNullException(nameof(error));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _authorization = authorization ?? throw new ArgumentNullException(nameof(authorization));
+                
+                // Initialize commands (READ-ONLY operations only)
+                SaveCommand = new AsyncRelayCommand(SaveAsync, () => CanSave());
+                AddLineCommand = new AsyncRelayCommand(AddLineAsync, () => !IsBusy && HasCreateSalePermission && SelectedProduct != null && Qty > 0);
+                RemoveLineCommand = new AsyncRelayCommand<SaleLineVm>(RemoveLine, _ => !IsBusy && HasCreateSalePermission);
+                RecalculateCommand = new AsyncRelayCommand(() => { RecalculateSubtotal(); return Task.CompletedTask; }, () => !IsBusy && HasCreateSalePermission);
+                
+                // listen for collection changes to update totals automatically
+                Lines.CollectionChanged += Lines_CollectionChanged;
+        }
+
+        private CustomerItem? _selectedCustomer;
         private int? _selectedCustomerId;
-        public int? SelectedCustomerId { get => _selectedCustomerId; set { if (SetProperty(ref _selectedCustomerId, value)) OnValidationChanged(); } }
+        
+        public CustomerItem? SelectedCustomer 
+        { 
+            get => _selectedCustomer; 
+            set 
+            { 
+                if (SetProperty(ref _selectedCustomer, value)) 
+                {
+                    SelectedCustomerId = value?.Id;
+                    OnValidationChanged();
+                }
+            } 
+        }
+        
+        public int? SelectedCustomerId 
+        { 
+            get => _selectedCustomerId; 
+            set 
+            { 
+                if (SetProperty(ref _selectedCustomerId, value)) 
+                {
+                    OnValidationChanged();
+                }
+            } 
+        }
+
+        private ProductVm? _selectedProduct;
+        public ProductVm? SelectedProduct
+        {
+            get => _selectedProduct;
+            set
+            {
+                if (SetProperty(ref _selectedProduct, value))
+                {
+                    // When product changes, update current line or create new one
+                    if (value != null && Lines.Any())
+                    {
+                        var lastLine = Lines.Last();
+                        lastLine.ProductId = value.Id;
+                        // ProductName will be updated automatically via ProductId setter
+                    }
+                    // Update command CanExecute
+                    AddLineCommand?.RaiseCanExecuteChanged();
+                }
+            }
+        }
+
+        public string? ProductInput { get; set; }
+        
+        private decimal _qty = 1m;
+        public decimal Qty 
+        { 
+            get => _qty; 
+            set 
+            { 
+                if (SetProperty(ref _qty, value)) 
+                {
+                    // When qty changes, update the current line if exists
+                    if (Lines.Any())
+                    {
+                        var lastLine = Lines.Last();
+                        lastLine.Quantity = value;
+                    }
+                    // Update command CanExecute
+                    AddLineCommand?.RaiseCanExecuteChanged();
+                }
+            } 
+        }
 
         public int? CustomerId { get; set; }
         public DateTime InvoiceDate { get; set; } = DateTime.Now;
@@ -75,15 +171,25 @@ namespace BestFlex.Shell.ViewModels
 
         public int? LastInvoiceId { get => _lastInvoiceId; private set => SetProperty(ref _lastInvoiceId, value); }
 
+        public bool IsFeatureAvailable
+        {
+            get => _isFeatureAvailable;
+            private set => SetProperty(ref _isFeatureAvailable, value);
+        }
+
+        public string? FeatureUnavailableReason
+        {
+            get => _featureUnavailableReason;
+            private set => SetProperty(ref _featureUnavailableReason, value);
+        }
+
         // Permission properties
-        public bool CanCreateSale => _permissions.CanCreateSale();
+        public bool HasCreateSalePermission => _authorization.HasPermissionAsync(Permission.CreateSale).Result;
         
         public AsyncRelayCommand SaveCommand { get; }
-        public ICommand AddLineCommand { get; }
-        public ICommand RemoveLineCommand { get; }
-        public ICommand RecalculateCommand { get; }
-
-        public bool CanSave => SelectedCustomerId.HasValue && Lines.Any() && Lines.All(l => l.ProductId > 0 && l.Quantity > 0 && l.UnitPrice >= 0);
+        public AsyncRelayCommand AddLineCommand { get; }
+        public AsyncRelayCommand<SaleLineVm> RemoveLineCommand { get; }
+        public AsyncRelayCommand RecalculateCommand { get; }
 
         private void OnValidationChanged()
         {
@@ -113,23 +219,45 @@ namespace BestFlex.Shell.ViewModels
             return null;
         }
 
-        public async Task LoadAsync() => await Task.CompletedTask;
-
-        // Discount / tax properties (defaults zero)
-        private decimal _discountPercent;
-        public decimal DiscountPercent { get => _discountPercent; set { if (SetProperty(ref _discountPercent, value)) RecalculateSubtotal(); } }
-
-        private decimal _taxPercent;
-        public decimal TaxPercent { get => _taxPercent; set { if (SetProperty(ref _taxPercent, value)) RecalculateSubtotal(); } }
-
-        private decimal _discountAmount;
-        public decimal DiscountAmount { get => _discountAmount; private set => SetProperty(ref _discountAmount, value); }
-
-        private decimal _taxAmount;
-        public decimal TaxAmount { get => _taxAmount; private set => SetProperty(ref _taxAmount, value); }
-
-        private decimal _total;
-        public decimal Total { get => _total; private set => SetProperty(ref _total, value); }
+        public async Task InitializeAsync() 
+        { 
+            try
+            {
+                _logger?.LogInformation("NewSaleViewModel.InitializeAsync started for OperationId: {OperationId}", OperationId);
+                
+                // Validate authorization FIRST
+                var hasPermission = await _authorization.HasPermissionAsync(Permission.CreateSale);
+                if (!hasPermission)
+                {
+                    var reason = await _authorization.GetPermissionDeniedReasonAsync(Permission.CreateSale);
+                    throw new UserFriendlyException(reason ?? "You do not have permission to create sales.");
+                }
+                
+                _canCreateSale = true; // Set permission flag
+                
+                // Check feature availability (moved from constructor)
+                CheckFeatureAvailability();
+                
+                if (!IsFeatureAvailable)
+                {
+                    throw new InvalidOperationException(FeatureUnavailableReason ?? "Sales feature not available");
+                }
+                
+                await LoadLookupsAsync();
+                
+                _logger?.LogInformation("NewSaleViewModel.InitializeAsync completed for OperationId: {OperationId}", OperationId);
+            }
+            catch (UserFriendlyException)
+            {
+                // Re-throw user-friendly exceptions as-is
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "NewSaleViewModel.InitializeAsync failed for OperationId: {OperationId}", OperationId);
+                throw new UserFriendlyException($"Failed to initialize sales module: {ex.Message}", ex);
+            }
+        }
 
         public async Task LoadLookupsAsync()
         {
@@ -142,33 +270,44 @@ namespace BestFlex.Shell.ViewModels
                 IsBusy = true;
                 
                 using var scope = _sp.CreateScope();
-                var db = scope.ServiceProvider.GetRequiredService<BestFlexDbContext>();
-
-                var customers = await db.CustomerAccounts
-                    .OrderBy(c => c.Name)
-                    .Select(c => new CustomerItem { Id = c.Id, Name = c.Name })
-                    .ToListAsync();
-
+                var productReadService = scope.ServiceProvider.GetRequiredService<IProductReadService>();
+                var customerReadService = scope.ServiceProvider.GetRequiredService<ICustomerReadService>();
+                
+                // Load customers using read service
+                var customers = await customerReadService.GetForSalesAsync();
                 Customers.Clear();
-                foreach (var c in customers) Customers.Add(c);
-
-                var prods = await db.Products
-                    .OrderBy(p => p.Code)
-                    .Select(p => new { p.Id, p.Code, p.Name, p.StockQty })
-                    .ToListAsync();
-
-                Products.Clear();
-                foreach (var p in prods)
+                foreach (var c in customers) 
                 {
-                    var price = await TryResolvePriceAsync(p.Id);
+                    Customers.Add(new CustomerItem { Id = c.Id, Name = c.Name });
+                }
+                _logger.LogInformation("Loaded {Count} customers for sales", Customers.Count);
+                
+                if (!Customers.Any())
+                {
+                    _logger.LogWarning("No customers available for sales");
+                    _error.HandleUserError("No customers available. Please create customers first.", "Data Unavailable");
+                }
+
+                // Load products using read service
+                var products = await productReadService.GetForSalesAsync();
+                Products.Clear();
+                foreach (var p in products)
+                {
                     Products.Add(new ProductVm
                     {
                         Id = p.Id,
                         Code = p.Code,
                         Name = p.Name,
                         StockQty = p.StockQty,
-                        DefaultPrice = price ?? 0m
+                        DefaultPrice = p.Price
                     });
+                }
+                _logger.LogInformation("Loaded {Count} products for sales", Products.Count);
+                
+                if (!Products.Any())
+                {
+                    _logger.LogWarning("No products available for sales");
+                    _error.HandleUserError("No products available. Please add products to inventory first.", "Data Unavailable");
                 }
             }
             catch (Exception ex)
@@ -182,33 +321,42 @@ namespace BestFlex.Shell.ViewModels
             }
         }
 
-
-        private async Task<decimal?> TryResolvePriceAsync(int productId)
-        {
-            using var scope = _sp.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<BestFlexDbContext>();
-
-            var p = await db.Products.FirstOrDefaultAsync(x => x.Id == productId);
-            if (p == null) return null;
-
-            var t = p.GetType();
-            var priceProp = t.GetProperty("DefaultPrice")
-                          ?? t.GetProperty("SellingPrice")
-                          ?? t.GetProperty("Price");
-            if (priceProp != null && priceProp.PropertyType == typeof(decimal))
-                return (decimal)priceProp.GetValue(p)!;
-
-            return null;
-        }
-
         public async Task AddLineAsync()
         {
-            var line = new SaleLineVm(this);
-            Lines.Add(line);
-            // subscription will be handled by CollectionChanged handler, but ensure totals updated
-            await Task.CompletedTask;
-            RecalculateSubtotal();
-            OnValidationChanged();
+            try
+            {
+                _logger.LogInformation("AddLineAsync started");
+                
+                if (!IsFeatureAvailable)
+                {
+                    throw new InvalidOperationException(FeatureUnavailableReason ?? "Sales feature not available");
+                }
+                
+                if (SelectedProduct == null) return;
+                
+                var line = new SaleLineVm(this);
+                line.ProductId = SelectedProduct.Id;
+                line.Quantity = Qty;
+                line.UnitPrice = SelectedProduct.DefaultPrice;
+                
+                Lines.Add(line);
+                
+                // Reset selection for next line
+                SelectedProduct = null;
+                Qty = 1m;
+                
+                // subscription will be handled by CollectionChanged handler, but ensure totals updated
+                await Task.CompletedTask;
+                RecalculateSubtotal();
+                OnValidationChanged();
+                
+                _logger.LogInformation("AddLineAsync completed successfully");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "AddLineAsync failed");
+                _error.Handle(ex, "Failed to add line");
+            }
         }
 
         public Task RemoveLine(SaleLineVm vm)
@@ -264,6 +412,9 @@ namespace BestFlex.Shell.ViewModels
             }
 
             RecalculateSubtotal();
+            // Update SaveCommand CanExecute when Lines collection changes
+            SaveCommand?.RaiseCanExecuteChanged();
+            OnValidationChanged();
         }
 
         private void SubscribeLine(SaleLineVm line)
@@ -302,52 +453,107 @@ namespace BestFlex.Shell.ViewModels
 
         public async Task SaveAsync()
         {
-            if (IsBusy) return;
-
-            var dto = new NewSaleDto
-            {
-                CustomerId = SelectedCustomerId ?? CustomerId,
-                InvoiceDate = InvoiceDate,
-                Currency = Currency,
-                Notes = Notes,
-                Items = Lines.Select(l => new NewSaleItemDto
-                {
-                    ProductId = l.ProductId,
-                    Quantity = l.Quantity,
-                    UnitPrice = l.UnitPrice
-                }).ToList()
-            };
-
             try
             {
-                IsBusy = true;
+                _logger.LogInformation("SaveAsync started");
                 
-                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+                if (!IsFeatureAvailable)
+                {
+                    throw new InvalidOperationException(FeatureUnavailableReason ?? "Sales feature not available");
+                }
+                
+                if (!CanSave()) return;
+                
+                IsBusy = true;
+                IsExecuting = true;
+                
+                var dto = new NewSaleDto
+                {
+                    CustomerId = SelectedCustomerId,
+                    InvoiceDate = InvoiceDate,
+                    Currency = Currency,
+                    Notes = Notes,
+                    Items = Lines.Select(l => new NewSaleItemDto
+                    {
+                        ProductId = l.ProductId,
+                        Quantity = l.Quantity,
+                        UnitPrice = l.UnitPrice
+                    }).ToList()
+                };
                 
                 var invoiceId = await _sales.CreateSaleAsync(dto);
                 LastInvoiceId = invoiceId;
-
-                // Log successful sale creation
-                await _audit.LogActionAsync("SALE_CREATED", "SellingInvoice", invoiceId);
-
-                stopwatch.Stop();
-                await _audit.LogSecurityAsync("PERFORMANCE_METRIC", $"Sale creation completed in {stopwatch.ElapsedMilliseconds}ms");
-
-                // Reset for next sale (or navigate to Invoice Details)
-                Lines.Clear();
+                
+                // Audit the sale creation
+                await _audit.LogActionAsync("SaleCreated", "SellingInvoice", invoiceId);
+                
+                _logger.LogInformation("SaveAsync completed successfully with invoice ID {InvoiceId}", invoiceId);
+                
+                // Close window after successful save
+                var window = System.Windows.Application.Current.Windows.OfType<Window>()
+                    .FirstOrDefault(w => w.DataContext == this);
+                window?.Close();
                 Notes = null;
                 OnPropertyChanged(nameof(Notes));
             }
             catch (Exception ex)
             {
-                _error.Handle(ex, "NewSaleViewModel.SaveAsync");
+                _logger.LogError(ex, "NewSaleViewModel.SaveAsync failed");
+                _error.Handle(ex, "Failed to save sale");
             }
             finally
             {
                 IsBusy = false;
-                _loadLock.Release();
+                IsExecuting = false;
             }
         }
+
+        private void CheckFeatureAvailability()
+        {
+            try
+            {
+                // Check if required services are available
+                var productReadService = _sp.GetService<IProductReadService>();
+                var customerReadService = _sp.GetService<ICustomerReadService>();
+
+                if (productReadService == null || customerReadService == null)
+                {
+                    IsFeatureAvailable = false;
+                    FeatureUnavailableReason = "Sales services not available";
+                    return;
+                }
+
+                // NOTE: Permission check moved to InitializeAsync() to avoid constructor work
+                // This method now only checks service availability
+
+                IsFeatureAvailable = true;
+                FeatureUnavailableReason = null;
+                _logger.LogInformation("Sales feature availability check passed");
+            }
+            catch (Exception ex)
+            {
+                var unwrapped = ReflectionExceptionUnwrapper.Unwrap(ex);
+                _logger.LogError(unwrapped, "Sales feature availability check failed");
+                IsFeatureAvailable = false;
+                FeatureUnavailableReason = "Feature availability check failed";
+            }
+        }
+
+        // Additional properties for calculations
+        private decimal _discountPercent;
+        public decimal DiscountPercent { get => _discountPercent; set { if (SetProperty(ref _discountPercent, value)) RecalculateSubtotal(); } }
+
+        private decimal _taxPercent;
+        public decimal TaxPercent { get => _taxPercent; set { if (SetProperty(ref _taxPercent, value)) RecalculateSubtotal(); } }
+
+        private decimal _discountAmount;
+        public decimal DiscountAmount { get => _discountAmount; private set => SetProperty(ref _discountAmount, value); }
+
+        private decimal _taxAmount;
+        public decimal TaxAmount { get => _taxAmount; private set => SetProperty(ref _taxAmount, value); }
+
+        private decimal _total;
+        public decimal Total { get => _total; private set => SetProperty(ref _total, value); }
     }
 
     public sealed class SaleLineVm : ViewModelBase
@@ -377,12 +583,22 @@ namespace BestFlex.Shell.ViewModels
                     }
                     _owner.OnLineChanged();
                     OnPropertyChanged(nameof(LineTotal));
+                    OnPropertyChanged(nameof(ProductCode)); // Notify ProductCode change
                 }
             }
         }
 
         private string _productName = "";
         public string ProductName { get => _productName; private set => SetProperty(ref _productName, value); }
+        
+        public string ProductCode 
+        { 
+            get 
+            { 
+                var p = _owner.Products.FirstOrDefault(x => x.Id == _productId);
+                return p?.Code ?? string.Empty;
+            } 
+        }
 
         private decimal _quantity;
         public decimal Quantity

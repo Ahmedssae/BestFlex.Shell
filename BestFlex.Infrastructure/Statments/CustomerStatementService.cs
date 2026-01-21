@@ -30,7 +30,7 @@ namespace BestFlex.Infrastructure.Statements
             // --- Opening balance = sum of invoices BEFORE 'from' ---
             var opening = await _db.SellingInvoices
                 .Where(i => i.CustomerAccountId == cust.Id && i.IssuedAt < from)
-                .Select(i => i.Items.Sum(x => x.Quantity * x.UnitPrice))
+                .Select(i => i.SellingInvoiceItems.Sum(x => x.Quantity * x.UnitPrice))
                 .DefaultIfEmpty(0m)
                 .SumAsync(ct);
 
@@ -43,7 +43,7 @@ namespace BestFlex.Infrastructure.Statements
                     i.Id,
                     i.InvoiceNo,
                     i.IssuedAt,
-                    Amount = i.Items.Sum(x => x.Quantity * x.UnitPrice),
+                    Amount = i.SellingInvoiceItems.Sum(x => x.Quantity * x.UnitPrice),
                     i.Currency
                 })
                 .ToListAsync(ct);
@@ -76,7 +76,7 @@ namespace BestFlex.Infrastructure.Statements
                 // treat full invoice amount as outstanding
                 var allInvoices = await _db.SellingInvoices
                     .Where(i => i.CustomerAccountId == cust.Id)
-                    .Select(i => new { i.IssuedAt, Amount = i.Items.Sum(x => x.Quantity * x.UnitPrice) })
+                    .Select(i => new { i.IssuedAt, Amount = i.SellingInvoiceItems.Sum(x => x.Quantity * x.UnitPrice) })
                     .ToListAsync(ct);
 
                 foreach (var i in allInvoices)

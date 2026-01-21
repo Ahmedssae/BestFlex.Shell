@@ -1,81 +1,56 @@
 ﻿using System.Windows;
-using BestFlex.Application.Abstractions;   // ICurrentUserService, IUserRepository
-using BestFlex.Infrastructure.Services;
-
+using System.Windows.Input;
+using BestFlex.Shell.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
+using System.Windows.Controls;
+using System.ComponentModel;
 
 namespace BestFlex.Shell
 {
     public partial class LoginWindow : Window
     {
-        private readonly LoginService _login;
-        private readonly IUserRepository _users;
-        private readonly ICurrentUserService _currentUser;
-
-        public LoginWindow()
+        public LoginWindow(LoginViewModel viewModel)
         {
             InitializeComponent();
-
-            // IMPORTANT: explicitly use System.Windows.Application to avoid clashes
-            var app = (App)System.Windows.Application.Current;
-
-            _login = app.Services.GetRequiredService<LoginService>();
-            _users = app.Services.GetRequiredService<IUserRepository>();
-            _currentUser = app.Services.GetRequiredService<ICurrentUserService>();
-
-            Loaded += (_, __) => UsernameBox.Focus();
+            DataContext = viewModel;
+            // Listen for login success (ViewModel signals state change). Window handles showing main window.
+            viewModel.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(LoginViewModel.LoginSucceeded) && viewModel.LoginSucceeded)
+                {
+                    try
+                    {
+                        var app = System.Windows.Application.Current as App;
+                        if (app != null)
+                        {
+                            var main = app.Services.GetRequiredService<MainWindow>();
+                            if (main != null)
+                            {
+                                app.MainWindow = main;
+                                main.Show();
+                                Close();
+                            }
+                        }
+                    }
+                    catch { /* best-effort: avoid throwing from UI thread */ }
+                }
+                // CancelRequested removed from VM; Cancel should be handled by UI (Cancel button click closes window).
+            };
         }
 
-        private async void Login_Click(object sender, RoutedEventArgs e)
+        // Removed older DialogResult mirroring; window listens directly to LoginSucceeded/CancelRequested.
+
+        private void PasswordBox_OnPasswordChanged(object sender, RoutedEventArgs e)
         {
-            ErrorText.Visibility = Visibility.Collapsed;
-
-            var username = UsernameBox.Text?.Trim() ?? "";
-            var password = PasswordBox.Password ?? "";
-
-            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
+            if (DataContext is LoginViewModel vm && sender is PasswordBox pb)
             {
-                ShowError("Enter username and password.");
-                return;
-            }
-
-            var ok = await _login.ValidateAsync(username, password);
-            if (ok)
-            {
-                // Step 5: wire login -> set current user
-                var user = await _users.FindByUsernameAsync(username);
-                if (user is null)
-                {
-                    ShowError("User record not found.");
-                    return;
-                }
-
-                _currentUser.SignIn(
-                    userId: user.Id,
-                    username: user.Username,
-                    displayName: user.DisplayName,
-                    roles: user.Roles
-                );
-
-                DialogResult = true; // success closes dialog
-            }
-            else
-            {
-                ShowError("Invalid credentials. Try again.");
-                PasswordBox.Clear();
-                PasswordBox.Focus();
+                vm.Password = pb.Password;
             }
         }
 
         private void Cancel_Click(object sender, RoutedEventArgs e)
         {
-            DialogResult = false; // cancel/close
-        }
-
-        private void ShowError(string message)
-        {
-            ErrorText.Text = message;
-            ErrorText.Visibility = Visibility.Visible;
+            Close();
         }
     }
 }

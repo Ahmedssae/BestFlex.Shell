@@ -20,10 +20,10 @@ namespace BestFlex.Shell.Pages
         // remains responsible for UI wiring (events, print/export) only.
         private readonly InvoicesPageViewModel _vm;
 
-        public InvoicesPage()
+        public InvoicesPage(InvoicesPageViewModel vm)
         {
             InitializeComponent();
-            _vm = new InvoicesPageViewModel(((App)System.Windows.Application.Current).Services);
+            _vm = vm ?? throw new ArgumentNullException(nameof(vm));
             grid.ItemsSource = _vm.Rows;
         }
 

@@ -1,5 +1,6 @@
 ﻿using BestFlex.Shell.Infrastructure;
 using BestFlex.Shell.Navigation;
+using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Linq;
 using System.Windows;
@@ -163,8 +164,7 @@ namespace BestFlex.Shell
                 var t = FindType(fullName);
                 if (t == null) continue;
 
-                var obj = sp.GetService(t) as FrameworkElement
-                          ?? Activator.CreateInstance(t) as FrameworkElement;
+                var obj = sp.GetRequiredService(t) as FrameworkElement;
                 if (obj != null) return obj;
             }
             return null;

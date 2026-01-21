@@ -13,8 +13,18 @@ namespace BestFlex.Infrastructure.Services
 
         public async Task<bool> ValidateAsync(string username, string password)
         {
-            var u = await _db.Users.SingleOrDefaultAsync(x => x.Username == username);
-            return u != null && BCryptNet.Verify(password, u.PasswordHash);
+            if (string.IsNullOrWhiteSpace(username)) return false;
+            var n = username.Trim().ToLowerInvariant();
+            var u = await _db.Users.FirstOrDefaultAsync(x => x.Username.ToLower() == n);
+            if (u == null) return false;
+            try
+            {
+                return BCryptNet.Verify(password ?? string.Empty, u.PasswordHash);
+            }
+            catch
+            {
+                return false;
+            }
         }
     }
 }

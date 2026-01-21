@@ -23,72 +23,72 @@ namespace BestFlex.Infrastructure.Services
 
         public async Task LogActionAsync(string action, string? entity = null, int? entityId = null)
         {
-            try
+            var entry = new BestFlex.Domain.Entities.AuditEntryEntity
             {
-                var audit = new AuditLog
-                {
-                    UserId = _currentUser.IsSignedIn ? 1 : 0, // Use a placeholder for now since AuditLog expects int
-                    Username = _currentUser.Username ?? "Unknown",
-                    Action = action,
-                    Entity = entity,
-                    EntityId = entityId,
-                    TimestampUtc = DateTime.UtcNow
-                };
+                Id = Guid.NewGuid(),
+                Action = action,
+                EntityName = entity ?? string.Empty,
+                EntityId = entityId?.ToString() ?? string.Empty,
+                UserId = _currentUser.IsSignedIn ? _currentUser.UserId.ToString() : string.Empty,
+                TimestampUtc = DateTime.UtcNow,
+                Details = string.Empty
+            };
 
-                _db.AuditLogs.Add(audit);
-                await _db.SaveChangesAsync();
-            }
-            catch (Exception ex)
-            {
-                // Logging failures must never break business flows
-                _logger.LogError(ex, "Failed to log audit action: {Action}", action);
-            }
+            _db.Set<BestFlex.Domain.Entities.AuditEntryEntity>().Add(entry);
+            await _db.SaveChangesAsync();
         }
 
         public async Task LogSecurityAsync(string action, string? details = null)
         {
-            try
+            var entry = new BestFlex.Domain.Entities.AuditEntryEntity
             {
-                var audit = new AuditLog
-                {
-                    UserId = _currentUser.IsSignedIn ? 1 : 0, // Use a placeholder for now since AuditLog expects int
-                    Username = _currentUser.Username ?? "Unknown",
-                    Action = action,
-                    Details = details,
-                    TimestampUtc = DateTime.UtcNow
-                };
+                Id = Guid.NewGuid(),
+                Action = action,
+                EntityName = string.Empty,
+                EntityId = string.Empty,
+                UserId = _currentUser.IsSignedIn ? _currentUser.UserId.ToString() : string.Empty,
+                TimestampUtc = DateTime.UtcNow,
+                Details = details ?? string.Empty
+            };
 
-                _db.AuditLogs.Add(audit);
-                await _db.SaveChangesAsync();
-            }
-            catch (Exception ex)
-            {
-                // Logging failures must never break business flows
-                _logger.LogError(ex, "Failed to log audit security event: {Action}", action);
-            }
+            _db.Set<BestFlex.Domain.Entities.AuditEntryEntity>().Add(entry);
+            await _db.SaveChangesAsync();
         }
 
         public async Task LogNavigationAsync(string destination)
         {
-            try
+            var entry = new BestFlex.Domain.Entities.AuditEntryEntity
             {
-                var audit = new AuditLog
-                {
-                    UserId = _currentUser.IsSignedIn ? 1 : 0, // Use a placeholder for now since AuditLog expects int
-                    Username = _currentUser.Username ?? "Unknown",
-                    Action = "NAVIGATION",
-                    Details = destination,
-                    TimestampUtc = DateTime.UtcNow
-                };
+                Id = Guid.NewGuid(),
+                Action = "NAVIGATION",
+                EntityName = destination,
+                EntityId = string.Empty,
+                UserId = _currentUser.IsSignedIn ? _currentUser.UserId.ToString() : string.Empty,
+                TimestampUtc = DateTime.UtcNow,
+                Details = string.Empty
+            };
 
-                _db.AuditLogs.Add(audit);
-                await _db.SaveChangesAsync();
-            }
-            catch (Exception ex)
+            _db.Set<BestFlex.Domain.Entities.AuditEntryEntity>().Add(entry);
+            await _db.SaveChangesAsync();
+        }
+
+        public async Task LogAsync(BestFlex.Application.AuditEntry entry, System.Threading.CancellationToken ct = default)
+        {
+            if (entry == null) throw new ArgumentNullException(nameof(entry));
+
+            var e = new BestFlex.Domain.Entities.AuditEntryEntity
             {
-                // Logging failures must never break business flows
-                _logger.LogError(ex, "Failed to log audit navigation: {Destination}", destination);
-            }
+                Id = entry.Id,
+                Action = entry.Action,
+                EntityName = entry.EntityName,
+                EntityId = entry.EntityId,
+                UserId = entry.UserId,
+                TimestampUtc = entry.TimestampUtc,
+                Details = entry.Details
+            };
+
+            _db.Set<BestFlex.Domain.Entities.AuditEntryEntity>().Add(e);
+            await _db.SaveChangesAsync(ct);
         }
     }
 }

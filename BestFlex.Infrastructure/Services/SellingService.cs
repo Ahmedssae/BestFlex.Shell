@@ -80,7 +80,7 @@ namespace BestFlex.Infrastructure.Services
                 Issuer = string.IsNullOrWhiteSpace(issuer) ? "BestFlex User" : issuer,
                 Description = description,
                 CustomerAccountId = customerAccountId,
-                Items = new List<SellingInvoiceItem>()
+                SellingInvoiceItems = new List<SellingInvoiceItem>()
             };
 
             // Lines + decrement stock
@@ -90,7 +90,7 @@ namespace BestFlex.Infrastructure.Services
 
                 foreach (var ln in g.Lines)
                 {
-                    invoice.Items.Add(new SellingInvoiceItem
+                    invoice.SellingInvoiceItems.Add(new SellingInvoiceItem
                     {
                         ProductId = product.Id,
                         Quantity = ln.qty,

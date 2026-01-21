@@ -39,7 +39,7 @@ namespace BestFlex.Shell.ViewModels
                     i.Currency,
                     i.Issuer,
                     i.Description,
-                    Items = i.Items.Select(it => new
+                    SellingInvoiceItems = i.SellingInvoiceItems.Select(it => new
                     {
                         it.ProductId,
                         Code = it.Product.Code,
@@ -63,7 +63,7 @@ namespace BestFlex.Shell.ViewModels
 
             Lines.Clear();
             decimal total = 0m;
-            foreach (var x in data.Items)
+            foreach (var x in data.SellingInvoiceItems)
             {
                 var lineTotal = x.Quantity * x.UnitPrice;
                 total += lineTotal;
