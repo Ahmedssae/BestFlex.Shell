@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using System.Windows.Input;
 using BCryptNet = BCrypt.Net.BCrypt;
 using BestFlex.Application.Abstractions;
+using BestFlex.Domain;
 using BestFlex.Infrastructure.Services;
 using BestFlex.Shell.Infrastructure;
 using Microsoft.Extensions.Logging;
@@ -16,6 +17,7 @@ namespace BestFlex.Shell.ViewModels
         private readonly IUserRepository _users;
         private readonly ICurrentUserService _currentUser;
         private readonly ILogger<LoginViewModel> _logger;
+        private readonly IForensicLogger _forensicLogger;
         
         private string _errorMessage = string.Empty;
         private bool _isBusy;
@@ -85,12 +87,14 @@ namespace BestFlex.Shell.ViewModels
             LoginService login,
             IUserRepository users,
             ICurrentUserService currentUser,
-            ILogger<LoginViewModel> logger)
+            ILogger<LoginViewModel> logger,
+            IForensicLogger forensicLogger)
         {
             _login = login ?? throw new ArgumentNullException(nameof(login));
             _users = users ?? throw new ArgumentNullException(nameof(users));
             _currentUser = currentUser ?? throw new ArgumentNullException(nameof(currentUser));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _forensicLogger = forensicLogger ?? throw new ArgumentNullException(nameof(forensicLogger));
 
             LoginCommand = new RelayCommand(
                 ExecuteLogin,
@@ -128,6 +132,17 @@ namespace BestFlex.Shell.ViewModels
                 {
                     _logger.LogWarning("Login failed: user not found for Username='{Username}'", Username);
                     ErrorMessage = "User not found";
+                    
+                    // Forensic logging
+                    await _forensicLogger.LogAsync(new BestFlex.Domain.ForensicEvent(
+                        BestFlex.Domain.ForensicEventType.LoginFailure,
+                        DateTime.UtcNow,
+                        Environment.MachineName,
+                        Username,
+                        $"Login failed: user not found for Username='{Username}'",
+                        null,
+                        null));
+                    
                     return;
                 }
 
@@ -148,6 +163,17 @@ namespace BestFlex.Shell.ViewModels
                 {
                     _logger.LogWarning("Login failed: invalid password for Username='{Username}'", Username);
                     ErrorMessage = "Invalid password";
+                    
+                    // Forensic logging
+                    await _forensicLogger.LogAsync(new BestFlex.Domain.ForensicEvent(
+                        BestFlex.Domain.ForensicEventType.LoginFailure,
+                        DateTime.UtcNow,
+                        Environment.MachineName,
+                        Username,
+                        $"Login failed: invalid password for Username='{Username}'",
+                        null,
+                        null));
+                    
                     return;
                 }
 

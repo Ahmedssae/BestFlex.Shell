@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\BestFlex.Application\BestFlex.Application.csproj" />
+    <ProjectReference Include="..\BestFlex.Application.Abstractions\BestFlex.Application.Abstractions.csproj" />
     <ProjectReference Include="..\BestFlex.Domain\BestFlex.Domain.csproj" />
     <ProjectReference Include="..\BestFlex.Persistence\BestFlex.Persistence.csproj" />
   </ItemGroup>

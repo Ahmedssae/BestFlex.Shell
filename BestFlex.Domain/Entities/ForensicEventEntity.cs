@@ -1,10 +1,12 @@
-using System;
+using BestFlex.Application.Abstractions;
+
 namespace BestFlex.Domain.Entities
 {
     public sealed class ForensicEventEntity
     {
         public long Id { get; private set; }
-        public int EventType { get; private set; }
+
+        public ForensicEventType EventType { get; private set; }
         public DateTime OccurredAtUtc { get; private set; }
         public string MachineName { get; private set; } = null!;
         public string UserName { get; private set; } = null!;
@@ -14,15 +16,15 @@ namespace BestFlex.Domain.Entities
 
         private ForensicEventEntity() { }
 
-        public ForensicEventEntity(int eventType, DateTime occurredAtUtc, string machineName, string userName, string description, string? correlationId, string? stackTrace)
+        public ForensicEventEntity(ForensicEvent evt)
         {
-            EventType = eventType;
-            OccurredAtUtc = occurredAtUtc;
-            MachineName = machineName;
-            UserName = userName;
-            Description = description;
-            CorrelationId = correlationId;
-            StackTrace = stackTrace;
+            EventType = evt.EventType;
+            OccurredAtUtc = evt.OccurredAtUtc;
+            MachineName = evt.MachineName;
+            UserName = evt.UserName;
+            Description = evt.Description;
+            CorrelationId = evt.CorrelationId;
+            StackTrace = evt.StackTrace;
         }
     }
 }

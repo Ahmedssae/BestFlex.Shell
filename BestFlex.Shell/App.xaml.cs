@@ -1,4 +1,6 @@
 ﻿using BestFlex.Application.Abstractions;
+using BestFlex.Application.Mapping;
+using BestFlex.Domain;
 using BestFlex.Infrastructure.Services.Sales;
 using BestFlex.Shell.ViewModels;
 using BestFlex.Infrastructure.Commands;
@@ -64,7 +66,7 @@ namespace BestFlex.Shell
             services.AddSingleton<BestFlex.Application.Abstractions.IRestoreSimulationService, BestFlex.Infrastructure.Diagnostics.RestoreSimulationService>();
             services.AddSingleton<BestFlex.Application.Abstractions.IReadOnlyModeService, BestFlex.Infrastructure.Diagnostics.ReadOnlyModeService>();
             // Forensic logger (Phase 20)
-            services.AddSingleton<BestFlex.Application.Abstractions.IForensicLogger, BestFlex.Infrastructure.Diagnostics.ForensicLogger>();
+            services.AddSingleton<BestFlex.Domain.IForensicLogger, BestFlex.Infrastructure.Diagnostics.ForensicLogger>();
 
             ServiceProvider = services.BuildServiceProvider();
             Services = ServiceProvider; // expose for code-behind usage
@@ -72,9 +74,9 @@ namespace BestFlex.Shell
             // Forensic log: System startup
             try
             {
-                var fl = Services.GetService<BestFlex.Application.Abstractions.IForensicLogger>();
-                fl?.LogAsync(new BestFlex.Application.Abstractions.ForensicEvent(
-                    BestFlex.Application.Abstractions.ForensicEventType.SystemStartup,
+                var fl = Services.GetService<BestFlex.Domain.IForensicLogger>();
+                fl?.LogAsync(new BestFlex.Domain.ForensicEvent(
+                    BestFlex.Domain.ForensicEventType.SystemStartup,
                     DateTime.UtcNow,
                     Environment.MachineName,
                     Services.GetService<BestFlex.Application.Abstractions.ICurrentUserService>()?.Username ?? "<unknown>",
@@ -343,9 +345,9 @@ namespace BestFlex.Shell
         {
             try
             {
-                var fl = Services?.GetService<BestFlex.Application.Abstractions.IForensicLogger>();
-                fl?.LogAsync(new BestFlex.Application.Abstractions.ForensicEvent(
-                    BestFlex.Application.Abstractions.ForensicEventType.SystemShutdown,
+                var fl = Services.GetService<BestFlex.Domain.IForensicLogger>();
+                fl?.LogAsync(new BestFlex.Domain.ForensicEvent(
+                    BestFlex.Domain.ForensicEventType.SystemShutdown,
                     DateTime.UtcNow,
                     Environment.MachineName,
                     Services.GetService<BestFlex.Application.Abstractions.ICurrentUserService>()?.Username ?? "<unknown>",
@@ -595,15 +597,15 @@ namespace BestFlex.Shell
                     var sink = scope.ServiceProvider.GetService<BestFlex.Application.Abstractions.ISystemEventSink>();
                     sink?.RecordAsync(new BestFlex.Application.Abstractions.SystemEvent(
                         DateTime.UtcNow,
-                        BestFlex.Application.Abstractions.SystemEventSeverity.Critical,
+                        ForensicToSystemSeverityMapper.Map(BestFlex.Domain.ForensicEventType.UnexpectedException),
                         "DispatcherUnhandledException",
                         unwrapped.Message ?? string.Empty,
                         unwrapped.GetType().FullName,
                         unwrapped.StackTrace)).GetAwaiter().GetResult();
 
-                    var fl = scope.ServiceProvider.GetService<BestFlex.Application.Abstractions.IForensicLogger>();
-                    fl?.LogAsync(new BestFlex.Application.Abstractions.ForensicEvent(
-                        BestFlex.Application.Abstractions.ForensicEventType.UnexpectedException,
+                    var fl = scope.ServiceProvider.GetService<BestFlex.Domain.IForensicLogger>();
+                    fl?.LogAsync(new BestFlex.Domain.ForensicEvent(
+                        BestFlex.Domain.ForensicEventType.UnexpectedException,
                         DateTime.UtcNow,
                         Environment.MachineName,
                         scope.ServiceProvider.GetService<BestFlex.Application.Abstractions.ICurrentUserService>()?.Username ?? "<unknown>",
@@ -649,9 +651,9 @@ namespace BestFlex.Shell
                 if (Services != null)
                 {
                     using var scope = Services.CreateScope();
-                    var fl = scope.ServiceProvider.GetService<BestFlex.Application.Abstractions.IForensicLogger>();
-                    fl?.LogAsync(new BestFlex.Application.Abstractions.ForensicEvent(
-                        BestFlex.Application.Abstractions.ForensicEventType.UnexpectedException,
+                    var fl = scope.ServiceProvider.GetService<BestFlex.Domain.IForensicLogger>();
+                    fl?.LogAsync(new BestFlex.Domain.ForensicEvent(
+                        BestFlex.Domain.ForensicEventType.UnexpectedException,
                         DateTime.UtcNow,
                         Environment.MachineName,
                         scope.ServiceProvider.GetService<BestFlex.Application.Abstractions.ICurrentUserService>()?.Username ?? "<unknown>",
@@ -683,7 +685,7 @@ namespace BestFlex.Shell
                         {
                             var se = new BestFlex.Application.Abstractions.SystemEvent(
                                 DateTime.UtcNow,
-                                BestFlex.Application.Abstractions.SystemEventSeverity.Critical,
+                                ForensicToSystemSeverityMapper.Map(BestFlex.Domain.ForensicEventType.Critical),
                                 "AppDomain_UnhandledException",
                                 unwrapped.Message ?? string.Empty,
                                 unwrapped.GetType().FullName,
@@ -694,9 +696,9 @@ namespace BestFlex.Shell
                     if (Services != null)
                     {
                         using var scope = Services.CreateScope();
-                        var fl = scope.ServiceProvider.GetService<BestFlex.Application.Abstractions.IForensicLogger>();
-                        fl?.LogAsync(new BestFlex.Application.Abstractions.ForensicEvent(
-                            BestFlex.Application.Abstractions.ForensicEventType.UnexpectedException,
+                        var fl = scope.ServiceProvider.GetService<BestFlex.Domain.IForensicLogger>();
+                        fl?.LogAsync(new BestFlex.Domain.ForensicEvent(
+                            BestFlex.Domain.ForensicEventType.UnexpectedException,
                             DateTime.UtcNow,
                             Environment.MachineName,
                             scope.ServiceProvider.GetService<BestFlex.Application.Abstractions.ICurrentUserService>()?.Username ?? "<unknown>",

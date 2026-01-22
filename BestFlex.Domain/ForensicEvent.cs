@@ -2,25 +2,8 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace BestFlex.Application.Abstractions
+namespace BestFlex.Domain
 {
-    public enum ForensicEventType
-    {
-        LoginSuccess,
-        LoginFailure,
-        AuthorizationFailure,
-        DataIntegrityFailure,
-        ReadOnlyModeEntered,
-        BackupCreated,
-        BackupFailed,
-        RestoreSimulationFailed,
-        AccountingPost,
-        SaleCommitted,
-        SystemStartup,
-        SystemShutdown,
-        UnexpectedException
-    }
-
     public sealed record ForensicEvent(
         ForensicEventType EventType,
         DateTime OccurredAtUtc,

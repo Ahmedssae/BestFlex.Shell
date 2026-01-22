@@ -2,12 +2,14 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using BestFlex.Application.Abstractions;
+using BestFlex.Domain;
 using BestFlex.Domain.Entities;
 using BestFlex.Persistence.Data;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace BestFlex.Infrastructure.Diagnostics
 {
-    public sealed class ForensicLogger : IForensicLogger
+    public sealed class ForensicLogger : BestFlex.Domain.IForensicLogger
     {
         private readonly IServiceProvider _sp;
 
@@ -16,7 +18,7 @@ namespace BestFlex.Infrastructure.Diagnostics
             _sp = sp ?? throw new ArgumentNullException(nameof(sp));
         }
 
-        public async Task LogAsync(BestFlex.Application.Abstractions.ForensicEvent forensicEvent, CancellationToken cancellationToken = default)
+        public async Task LogAsync(BestFlex.Domain.ForensicEvent forensicEvent, CancellationToken cancellationToken = default)
         {
             try
             {
@@ -29,14 +31,7 @@ namespace BestFlex.Infrastructure.Diagnostics
                 if (options == null) return;
 
                 using var db = new BestFlexDbContext(options);
-                var ent = new ForensicEventEntity(
-                    (int)forensicEvent.EventType,
-                    forensicEvent.OccurredAtUtc,
-                    forensicEvent.MachineName,
-                    forensicEvent.UserName,
-                    forensicEvent.Description,
-                    forensicEvent.CorrelationId,
-                    forensicEvent.StackTrace);
+                var ent = new ForensicEventEntity(forensicEvent);
                 db.ForensicEvents.Add(ent);
                 await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             }

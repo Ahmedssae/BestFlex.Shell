@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using BestFlex.Application.Abstractions;
+using BestFlex.Domain;
 
 namespace BestFlex.Infrastructure.Diagnostics
 {
@@ -31,9 +32,9 @@ namespace BestFlex.Infrastructure.Diagnostics
             {
                 if (sp != null)
                 {
-                    var fl = sp.GetService(typeof(BestFlex.Application.Abstractions.IForensicLogger)) as BestFlex.Application.Abstractions.IForensicLogger;
-                    fl?.LogAsync(new BestFlex.Application.Abstractions.ForensicEvent(
-                        BestFlex.Application.Abstractions.ForensicEventType.ReadOnlyModeEntered,
+                    var fl = sp.GetService(typeof(BestFlex.Domain.IForensicLogger)) as BestFlex.Domain.IForensicLogger;
+                    fl?.LogAsync(new BestFlex.Domain.ForensicEvent(
+                        BestFlex.Domain.ForensicEventType.ReadOnlyModeEntered,
                         DateTime.UtcNow,
                         Environment.MachineName,
                         sp.GetService(typeof(BestFlex.Application.Abstractions.ICurrentUserService)) is BestFlex.Application.Abstractions.ICurrentUserService cu ? cu.Username : "<unknown>",
