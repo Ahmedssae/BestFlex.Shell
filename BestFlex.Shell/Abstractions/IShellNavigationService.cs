@@ -11,6 +11,9 @@ namespace BestFlex.Shell.Abstractions
     /// </summary>
     public interface IShellNavigationService : BestFlex.Application.Abstractions.INavigationService
     {
+        /// <summary>Navigate to dashboard page safely.</summary>
+        void NavigateToDashboard();
+        
         /// <summary>Open quick add customer window.</summary>
         void OpenQuickAddCustomer(System.Windows.Window? owner = null);
         

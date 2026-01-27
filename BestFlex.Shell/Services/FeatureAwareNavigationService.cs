@@ -39,6 +39,21 @@ namespace BestFlex.Shell.Services
             _printingAvailability = printingAvailability ?? throw new ArgumentNullException(nameof(printingAvailability));
         }
 
+        public void NavigateToDashboard()
+        {
+            NavigateWithFeatureCheck(
+                route: NavigationRoutes.Dashboard,
+                feature: "Navigation",
+                action: () =>
+                {
+                    var navigator = _sp.GetService<BestFlex.Shell.Navigation.INavigator>();
+                    if (navigator != null && !navigator.NavigateSafe("dashboard", "Failed to load dashboard"))
+                    {
+                        _notification.ShowError("Dashboard page unavailable");
+                    }
+                });
+        }
+
         public void OpenQuickAddCustomer(Window? owner = null)
         {
             NavigateWithFeatureCheck(
@@ -217,9 +232,8 @@ namespace BestFlex.Shell.Services
                 feature: "Sales",
                 action: () =>
                 {
-                    // Navigate to New Sale page via main navigation
-                    // TODO: Implement proper page navigation
-                    _notification.ShowInfo("New Sale page would be opened here.");
+                    var navigationService = _sp.GetService<BestFlex.Shell.Abstractions.IShellNavigationService>();
+                    navigationService?.NavigateToDashboard();
                 },
                 context: "New Sale"
             );
@@ -252,7 +266,7 @@ namespace BestFlex.Shell.Services
                 action: () =>
                 {
                     var window = _sp.GetService<BestFlex.Shell.Windows.UnpaidInvoicesWindow>()
-                        ?? ActivatorUtilities.CreateInstance<BestFlex.Shell.Windows.UnpaidInvoicesWindow>(_sp, new object[] { topN, preselectCustomerId });
+                        ?? ActivatorUtilities.CreateInstance<BestFlex.Shell.Windows.UnpaidInvoicesWindow>(_sp, new object[] { topN, preselectCustomerId! });
                     if (window != null)
                     {
                         window.Owner = System.Windows.Application.Current?.MainWindow;

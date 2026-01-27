@@ -288,7 +288,31 @@ namespace BestFlex.Shell.ViewModels
                 
                 _notification.ShowInfo("You have been signed out.");
                 
-                System.Windows.Application.Current.Shutdown();
+                // LOGOUT / SESSION RESET - Clean logout - return to login window
+                var app = (App)System.Windows.Application.Current;
+                var loginWindow = app.Services.GetRequiredService<LoginWindow>();
+                
+                // Reset login progress flag for clean re-login
+                var loginType = typeof(LoginWindow);
+                var loginField = loginType.GetField("_isLoginInProgress", 
+                    System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+                loginField?.SetValue(null, false);
+                
+                // Close current MainWindow
+                System.Windows.Application.Current.MainWindow?.Close();
+                
+                // Reset shutdown mode for login window
+                System.Windows.Application.Current.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
+                
+                // Show login window
+                app.MainWindow = loginWindow;
+                loginWindow.WindowStartupLocation = System.Windows.WindowStartupLocation.CenterScreen;
+                loginWindow.Width = 500;
+                loginWindow.Height = 350;
+                loginWindow.ShowActivated = true;
+                loginWindow.Topmost = true;
+                loginWindow.Show();
+                loginWindow.Activate();
                 
                 _logger.LogInformation("SignOutAsync completed");
                 await Task.CompletedTask;

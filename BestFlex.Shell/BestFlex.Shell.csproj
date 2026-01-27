@@ -3,8 +3,11 @@
 		<OutputType>WinExe</OutputType>
 		<TargetFramework>net8.0-windows</TargetFramework>
 		<UseWPF>true</UseWPF>
+		<StartupObject>BestFlex.Shell.App</StartupObject>
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
+		<StartupObject>BestFlex.Shell.App</StartupObject>
+		<StartupObject>BestFlex.Shell.App</StartupObject>
 	</PropertyGroup>
 	<ItemGroup>
 	  <None Remove="appsettings.json" />

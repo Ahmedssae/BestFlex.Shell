@@ -74,7 +74,8 @@ namespace BestFlex.Shell.Pages
                     var just = wnd.CreatedProduct;
                     var idProp = just?.GetType().GetProperty("Id");
                     if (idProp == null) return;
-                    int id = (int)Convert.ChangeType(idProp.GetValue(just), typeof(int));
+                    var idValue = idProp.GetValue(just);
+                    int id = idValue != null ? (int)Convert.ChangeType(idValue, typeof(int)) : 0;
                     if (!_vm.Lines.Any()) _vm.AddLineCommand.Execute(null);
                     var line = _vm.Lines.Last();
                     line.ProductId = id;

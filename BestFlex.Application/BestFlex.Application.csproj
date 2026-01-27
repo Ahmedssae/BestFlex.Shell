@@ -13,6 +13,7 @@
 	</ItemGroup>
 	<ItemGroup>
 		<ProjectReference Include="..\BestFlex.Domain\BestFlex.Domain.csproj" />
+		<ProjectReference Include="..\BestFlex.Application.Abstractions\BestFlex.Application.Abstractions.csproj" />
 	</ItemGroup>
 	<ItemGroup>
 	</ItemGroup>

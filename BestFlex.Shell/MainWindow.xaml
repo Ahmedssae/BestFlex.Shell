@@ -54,7 +54,9 @@
                     BorderThickness="1"
                     CornerRadius="8"
                     Padding="12">
-                <ContentControl x:Name="MainHost"/>
+                <Grid>
+                    <ContentControl x:Name="MainHost"/>
+                </Grid>
             </Border>
         </Grid>
     </DockPanel>

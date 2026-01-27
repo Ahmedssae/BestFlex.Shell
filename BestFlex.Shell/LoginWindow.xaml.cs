@@ -9,6 +9,8 @@ namespace BestFlex.Shell
 {
     public partial class LoginWindow : Window
     {
+        private static bool _isLoginInProgress = false;
+        
         public LoginWindow(LoginViewModel viewModel)
         {
             InitializeComponent();
@@ -18,23 +20,43 @@ namespace BestFlex.Shell
             {
                 if (e.PropertyName == nameof(LoginViewModel.LoginSucceeded) && viewModel.LoginSucceeded)
                 {
+                    // SINGLE-SHELL GUARANTEE - Prevent double-login execution
+                    if (_isLoginInProgress)
+                    {
+                        return;
+                    }
+                    
+                    _isLoginInProgress = true;
+                    
                     try
                     {
                         var app = System.Windows.Application.Current as App;
                         if (app != null)
                         {
-                            var main = app.Services.GetRequiredService<MainWindow>();
-                            if (main != null)
+                            // Close any existing MainWindow before creating new one
+                            if (System.Windows.Application.Current.MainWindow is MainWindow existingMainWindow && 
+                                existingMainWindow != app.MainWindow)
                             {
-                                app.MainWindow = main;
-                                main.Show();
-                                Close();
+                                existingMainWindow.Close();
                             }
+                            
+                            var mainWindow = app.Services.GetRequiredService<MainWindow>();
+                            System.Windows.Application.Current.MainWindow = mainWindow;
+                            
+                            mainWindow.Show();
+                            
+                            Hide();
+                            Close();
+                            
+                            System.Windows.Application.Current.ShutdownMode = ShutdownMode.OnMainWindowClose;
                         }
                     }
-                    catch { /* best-effort: avoid throwing from UI thread */ }
+                    catch
+                    {
+                        _isLoginInProgress = false;
+                        /* best-effort: avoid throwing from UI thread */
+                    }
                 }
-                // CancelRequested removed from VM; Cancel should be handled by UI (Cancel button click closes window).
             };
         }
 

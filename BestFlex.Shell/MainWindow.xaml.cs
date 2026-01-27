@@ -6,12 +6,13 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using BestFlex.Shell.Pages;
 
 namespace BestFlex.Shell
 {
     public partial class MainWindow : Window
     {
-        private readonly ILogger<MainWindow> _logger;
+        private readonly ILogger<MainWindow>? _logger;
 
         public MainWindow()
         {
@@ -22,12 +23,10 @@ namespace BestFlex.Shell
                 var app = (App)System.Windows.Application.Current;
                 _logger = app.Services.GetRequiredService<ILogger<MainWindow>>();
                 
+                // Set DataContext explicitly
                 DataContext = this;
-
-                // Subscribe to Loaded event for ViewModel initialization
-                Loaded += async (_, __) => await LoadViewModelAsync();
                 
-                _logger.LogInformation("MainWindow initialized successfully");
+                _logger?.LogInformation("Shell initialized successfully");
             }
             catch (Exception ex)
             {
@@ -38,11 +37,11 @@ namespace BestFlex.Shell
             }
         }
 
-        private async Task LoadViewModelAsync()
+        public void InitializeShell()
         {
             try
             {
-                _logger.LogInformation("MainWindow.LoadViewModelAsync started");
+                _logger?.LogInformation("MainWindow.InitializeShell started");
                 
                 // Get the ViewModel through DI - this will properly initialize with feature checks
                 var app = (App)System.Windows.Application.Current;
@@ -54,14 +53,14 @@ namespace BestFlex.Shell
                 {
                     var featureNames = string.Join(", ", unavailableCoreFeatures.Select(f => f.Name));
                     var message = $"Core ERP features unavailable: {featureNames}. Application cannot continue.";
-                    _logger.LogCritical("Core features unavailable: {FeatureNames}", featureNames);
+                    _logger?.LogCritical("Core features unavailable: {FeatureNames}", featureNames);
                     MessageBox.Show(message, "Critical Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     Close();
                     return;
                 }
 
                 // Load ViewModel data - this will check its own feature availability
-                await vm.LoadAsync();
+                vm.LoadAsync().GetAwaiter().GetResult();
                 
                 // Hide template entries if not admin
                 if (!vm.IsAdmin)
@@ -69,14 +68,40 @@ namespace BestFlex.Shell
                     HideTemplateEntries();
                 }
                 
-                _logger.LogInformation("MainWindow.LoadViewModelAsync completed successfully");
+                _logger?.LogInformation("MainWindow.InitializeShell completed successfully");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "MainWindow.LoadViewModelAsync failed");
-                MessageBox.Show($"Failed to load main window: {ex.Message}", "Error", 
+                _logger?.LogError(ex, "Failed to initialize shell");
+                MessageBox.Show($"Failed to initialize shell: {ex.Message}", "Error", 
                     MessageBoxButton.OK, MessageBoxImage.Error);
-                Close();
+            }
+        }
+
+        public void NavigateToInitialPage()
+        {
+            try
+            {
+                _logger?.LogInformation("MainWindow.NavigateToInitialPage started");
+                
+                var app = (App)System.Windows.Application.Current;
+                var navigationService = app.Services.GetService<BestFlex.Shell.Abstractions.IShellNavigationService>();
+                
+                if (navigationService != null)
+                {
+                    navigationService.NavigateToDashboard();
+                    _logger?.LogInformation("MainWindow.NavigateToInitialPage completed successfully");
+                }
+                else
+                {
+                    throw new InvalidOperationException("Navigation service not available");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Failed to navigate to initial page");
+                // Show fallback page directly
+                MainHost.Content = new SafeFallbackPage($"Navigation failed: {ex.Message}");
             }
         }
 
@@ -109,7 +134,7 @@ namespace BestFlex.Shell
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to hide template entries");
+                _logger?.LogError(ex, "Failed to hide template entries");
                 // best-effort; never break shell
             }
         }

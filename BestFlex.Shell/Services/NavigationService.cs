@@ -30,6 +30,43 @@ namespace BestFlex.Shell.Services
             _salesGate = salesGate ?? throw new ArgumentNullException(nameof(salesGate));
         }
         
+        public void NavigateToDashboard()
+        {
+            try
+            {
+                var mainWindow = System.Windows.Application.Current?.MainWindow as MainWindow;
+                if (mainWindow?.MainHost == null)
+                {
+                    _notification.ShowError("Main window not available");
+                    return;
+                }
+
+                var navigator = _sp.GetService<BestFlex.Shell.Navigation.INavigator>();
+                if (navigator == null)
+                {
+                    _notification.ShowError("Navigation service not available");
+                    return;
+                }
+
+                // Use safe navigation to dashboard
+                if (!navigator.NavigateSafe("dashboard", "Failed to load dashboard page"))
+                {
+                    _notification.ShowError("Dashboard page unavailable");
+                }
+                else
+                {
+                    // Set the loaded page to the MainHost
+                    mainWindow.MainHost.Content = navigator.Current;
+                }
+            }
+            catch (Exception ex)
+            {
+                var unwrapped = ReflectionExceptionUnwrapper.Unwrap(ex);
+                _error.Handle(unwrapped, "NavigationService.NavigateToDashboard");
+                _notification.ShowError("Failed to navigate to dashboard");
+            }
+        }
+        
         public void OpenQuickAddCustomer(Window? owner = null)
         {
             try
@@ -58,8 +95,6 @@ namespace BestFlex.Shell.Services
                 await lockObj.WaitAsync();
                 try
                 {
-                    await _audit.LogNavigationAsync($"InvoiceDetails:{invoiceId}");
-                    
                     var currentApp = System.Windows.Application.Current;
                     if (currentApp == null) return;
                     var app = (App)currentApp;
@@ -117,8 +152,6 @@ namespace BestFlex.Shell.Services
         {
             try
             {
-                _ = Task.Run(async () => await _audit.LogNavigationAsync("NewSale"));
-                
                 // Module gate check BEFORE any other logic
                 if (!_salesGate.IsEnabled())
                 {
@@ -162,12 +195,10 @@ namespace BestFlex.Shell.Services
             }
         }
 
-        public void OpenLowStock(int threshold)
+        public void OpenLowStock(int threshold = 5)
         {
             try
             {
-                _ = Task.Run(async () => await _audit.LogNavigationAsync($"LowStock:{threshold}"));
-                
                 var currentApp = System.Windows.Application.Current;
                 if (currentApp == null) return;
                 var app = (App)currentApp;
@@ -187,12 +218,10 @@ namespace BestFlex.Shell.Services
         {
             try
             {
-                _ = Task.Run(async () => await _audit.LogNavigationAsync($"UnpaidInvoices:{topN}{(preselectCustomerId.HasValue ? $":{preselectCustomerId}" : "")}"));
-                
                 var currentApp = System.Windows.Application.Current;
                 if (currentApp == null) return;
                 var app = (App)currentApp;
-                var wnd = app.Services.GetService<Windows.UnpaidInvoicesWindow>() ?? ActivatorUtilities.CreateInstance<Windows.UnpaidInvoicesWindow>(_sp, new object[] { topN, preselectCustomerId ?? (object?)null });
+                var wnd = app.Services.GetService<Windows.UnpaidInvoicesWindow>() ?? ActivatorUtilities.CreateInstance<Windows.UnpaidInvoicesWindow>(_sp, new object[] { topN, preselectCustomerId ?? (object?)null! });
                 wnd.Owner = System.Windows.Application.Current?.MainWindow;
                 wnd.ShowDialog();
             }

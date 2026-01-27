@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using BestFlex.Application.Contracts.Sales;
+using BestFlex.Application.Abstractions.Contracts.Sales;
 
 namespace BestFlex.Application.Abstractions
 {

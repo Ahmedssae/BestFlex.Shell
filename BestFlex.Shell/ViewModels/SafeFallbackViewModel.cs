@@ -97,7 +97,8 @@ namespace BestFlex.Shell.ViewModels
             try
             {
                 _logger.LogInformation("SafeFallbackViewModel exit requested");
-                System.Windows.Application.Current.Shutdown();
+                // FORBIDDEN: Application shutdown during login transition
+                // System.Windows.Application.Current.Shutdown();
             }
             catch (Exception ex)
             {

@@ -9,18 +9,17 @@ public class DesignTimeFactory : IDesignTimeDbContextFactory<BestFlexDbContext>
 {
     public BestFlexDbContext CreateDbContext(string[] args)
     {
-        var config = new ConfigurationBuilder()
-            .SetBasePath(Directory.GetCurrentDirectory())
-            .AddJsonFile("efsettings.json", optional: true)
-            .Build();
-
-        var conn = config.GetConnectionString("LocalSqlite")
-                   ?? "Data Source=bestflex_local.db";
-
-        var options = new DbContextOptionsBuilder<BestFlexDbContext>()
-            .UseSqlite(conn)
-            .Options;
-
-        return new BestFlexDbContext(options);
+        var options = new DbContextOptionsBuilder<BestFlexDbContext>();
+        
+        var dbPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "BestFlex",
+            "bestflex.db");
+        
+        // Ensure directory exists
+        Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
+        
+        options.UseSqlite($"Data Source={dbPath}");
+        return new BestFlexDbContext(options.Options);
     }
 }

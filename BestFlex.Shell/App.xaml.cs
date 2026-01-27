@@ -1,11 +1,11 @@
 ﻿using BestFlex.Application.Abstractions;
 using BestFlex.Application.Mapping;
 using BestFlex.Domain;
-using BestFlex.Infrastructure.Services.Sales;
 using BestFlex.Shell.ViewModels;
 using BestFlex.Infrastructure.Commands;
 using BestFlex.Infrastructure.Services;
 using BestFlex.Infrastructure.Transactions;
+using System.Windows.Threading;
 
 using BestFlex.Infrastructure.Auth;
 using BestFlex.Persistence.Data;
@@ -28,15 +28,47 @@ using BCryptNet = BCrypt.Net.BCrypt;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Resources;
 
 namespace BestFlex.Shell
 {
     public partial class App : System.Windows.Application
     {
+      static App()
+{
+    try
+    {
+        var dir = @"C:\temp";
+        if (!Directory.Exists(dir))
+            Directory.CreateDirectory(dir);
+
+        File.WriteAllText(
+            Path.Combine(dir, "BESTFLEX_STARTUP.txt"),
+            "App static constructor executed at " + DateTime.Now + Environment.NewLine
+        );
+    }
+    catch (Exception ex)
+    {
+        try
+        {
+            File.AppendAllText(@"C:\temp\BESTFLEX_STARTUP.txt", "Static ctor failed: " + ex + Environment.NewLine);
+        }
+        catch { }
+    }
+}
+
         public IServiceProvider Services { get; private set; } = null!;
+
+        public App()
+        {
+            File.AppendAllText(@"C:\temp\BESTFLEX_STARTUP.txt", "App constructor executed at " + DateTime.Now + Environment.NewLine);
+        }
 
         protected override void OnStartup(StartupEventArgs e)
         {
+            // 2. FORCE SHUTDOWN MODE IMMEDIATELY
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
             base.OnStartup(e);
 
             var services = new ServiceCollection();
@@ -71,145 +103,170 @@ namespace BestFlex.Shell
             ServiceProvider = services.BuildServiceProvider();
             Services = ServiceProvider; // expose for code-behind usage
 
-            // Forensic log: System startup
+            // 5. EXCEPTION VISIBILITY (MANDATORY)
             try
             {
-                var fl = Services.GetService<BestFlex.Domain.IForensicLogger>();
-                fl?.LogAsync(new BestFlex.Domain.ForensicEvent(
-                    BestFlex.Domain.ForensicEventType.SystemStartup,
-                    DateTime.UtcNow,
-                    Environment.MachineName,
-                    Services.GetService<BestFlex.Application.Abstractions.ICurrentUserService>()?.Username ?? "<unknown>",
-                    "Application startup",
-                    null,
-                    null)).GetAwaiter().GetResult();
-            }
-            catch { }
+                // Forensic log: System startup
+                try
+                {
+                    var fl = Services.GetService<BestFlex.Domain.IForensicLogger>();
+                    fl?.LogAsync(new BestFlex.Domain.ForensicEvent(
+                        BestFlex.Domain.ForensicEventType.SystemStartup,
+                        DateTime.UtcNow,
+                        Environment.MachineName,
+                        Services.GetService<BestFlex.Application.Abstractions.ICurrentUserService>()?.Username ?? "<unknown>",
+                        "Application startup",
+                        null,
+                        null)).GetAwaiter().GetResult();
+                }
+                catch { }
 
-            // Validate critical dependency graph ONCE, immediately after provider is built and before any UI or DB operations
-            var dependencyHealthService = ServiceProvider.GetRequiredService<BestFlex.Application.Abstractions.IDependencyHealthService>();
-            try
-            {
-                dependencyHealthService.Validate(Services);
+                // Phase 0.2: Validate theme contract BEFORE any UI operations
+                ValidateThemeContract();
+                
+                // Phase 1: Register SafeFallbackPage for navigation
+                RegisterSafeNavigation();
+
+                // Ensure database is created before any validation or operations
+                using var dbScope = Services.CreateScope();
+                var dbContext = dbScope.ServiceProvider.GetRequiredService<BestFlexDbContext>();
+                dbContext.Database.EnsureCreated();
+
+                // Validate critical dependency graph ONCE, immediately after provider is built and before any UI or DB operations
+                var dependencyHealthService = ServiceProvider.GetRequiredService<BestFlex.Application.Abstractions.IDependencyHealthService>();
+                try
+                {
+                    dependencyHealthService.Validate(Services);
+                }
+                catch (InvalidOperationException)
+                {
+                    // Let the process terminate by rethrowing; do not swallow or show UI here per constraints
+                    // Rethrow to prevent any further startup
+                    throw;
+                }
+
+                // Phase 18: Data integrity validation (hard stop if unhealthy)
+                using (var integrityScope = ServiceProvider.CreateScope())
+                {
+                    var integrityValidator = integrityScope.ServiceProvider.GetRequiredService<BestFlex.Application.Abstractions.IDataIntegrityValidator>();
+                    var integrity = integrityValidator.ValidateAsync().GetAwaiter().GetResult();
+                    if (!integrity.IsHealthy)
+                    {
+                        // Enter read-only mode if supported
+                        try
+                        {
+                            var rom = integrityScope.ServiceProvider.GetService<BestFlex.Application.Abstractions.IReadOnlyModeService>() as BestFlex.Infrastructure.Diagnostics.ReadOnlyModeService;
+                            rom?.EnterReadOnlyWithLogging("Integrity / recovery failure", integrityScope.ServiceProvider);
+                        }
+                        catch { }
+                        throw new InvalidOperationException($"CRITICAL: Data integrity validation failed. {integrity.FailureReason}");
+                    }
+                }
+
+                // Phase 19: Startup backup and restore simulation
+                using (var backupScope = ServiceProvider.CreateScope())
+                {
+                    var backupService = backupScope.ServiceProvider.GetRequiredService<BestFlex.Application.Abstractions.IBackupService>();
+                    var restoreSim = backupScope.ServiceProvider.GetRequiredService<BestFlex.Application.Abstractions.IRestoreSimulationService>();
+                    var readOnly = backupScope.ServiceProvider.GetRequiredService<BestFlex.Application.Abstractions.IReadOnlyModeService>();
+
+                    var backup = backupService.CreateBackupAsync().GetAwaiter().GetResult();
+                    if (!backup.Success)
+                    {
+                        readOnly.EnterReadOnly("Integrity / recovery failure");
+                        throw new InvalidOperationException($"CRITICAL: Startup backup failed. {backup.FailureReason}");
+                    }
+
+                    var canRestore = restoreSim.CanRestoreAsync(backup.BackupPath).GetAwaiter().GetResult();
+                    if (!canRestore)
+                    {
+                        readOnly.EnterReadOnly("Integrity / recovery failure");
+                        throw new InvalidOperationException("CRITICAL: Backup restore simulation failed.");
+                    }
+                }
+
+                // Ensure DB schema exists and seed user BEFORE showing UI
+                using (var scope = ServiceProvider.CreateScope())
+                {
+                    var logger = scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<App>>();
+                    var db = scope.ServiceProvider.GetRequiredService<BestFlexDbContext>();
+
+                    try
+                    {
+                        var conn = db.Database.GetDbConnection().ConnectionString;
+                        logger.LogInformation("Database connection: {Conn}", conn);
+
+                        var tables = db.Model.GetEntityTypes().Select(e => e.GetTableName()).Where(n => !string.IsNullOrEmpty(n)).ToList();
+                        logger.LogInformation("Mapped tables: {Tables}", string.Join(',', tables));
+
+                        // Apply migrations (preferred). Falls through on success.
+                        db.Database.Migrate();
+                        logger.LogInformation("Database migrated successfully");
+                    }
+                    catch (Exception ex)
+                    {
+                        // If migrations fail, try EnsureCreated as a fallback for dev scenarios
+                        var logger2 = scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<App>>();
+                        logger2.LogWarning(ex, "Database.Migrate() failed; attempting EnsureCreated()");
+                        try
+                        {
+                            db.Database.EnsureCreated();
+                            logger2.LogInformation("Database EnsureCreated succeeded");
+                        }
+                        catch (Exception ex2)
+                        {
+                            logger2.LogError(ex2, "Failed to create or migrate database");
+                            throw new InvalidOperationException("Database schema not created", ex2);
+                        }
+                    }
+
+                    // Verify Users table exists by attempting a query
+                    try
+                    {
+                        var cnt = db.Users.Count();
+                        logger.LogInformation("Users table row count before seeding: {Count}", cnt);
+
+                        if (cnt == 0)
+                        {
+                            // Seed default admin
+                            var user = new BestFlex.Domain.Entities.Users
+                            {
+                                Id = Guid.NewGuid(),
+                                Username = "admin",
+                                DisplayName = "Administrator",
+                                PasswordHash = BCryptNet.HashPassword("admin"),
+                                RolesCsv = "Admin",
+                                CreatedAtUtc = DateTime.UtcNow
+                            };
+                            db.Users.Add(user);
+                            db.SaveChanges();
+                            var after = db.Users.Count();
+                            logger.LogInformation("Users table row count after seeding: {Count}", after);
+                            if (after == 0)
+                                throw new InvalidOperationException("User seeding failed");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        var logger3 = scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<App>>();
+                        logger3.LogError(ex, "Users table check or seeding failed");
+                        throw new InvalidOperationException("Database schema not created", ex);
+                    }
+                }
+
+                // 3. FORCE LOGIN WINDOW SHOW (NO CONDITIONS)
+            var login = Services.GetRequiredService<LoginWindow>();
+            System.Windows.Application.Current.MainWindow = login;
+            File.AppendAllText(@"C:\temp\BESTFLEX_STARTUP.txt", "About to show login window at " + DateTime.Now + Environment.NewLine);
+            login.Show();
+            File.AppendAllText(@"C:\temp\BESTFLEX_STARTUP.txt", "Login window shown at " + DateTime.Now + Environment.NewLine);
             }
-            catch (InvalidOperationException ex)
+            catch (Exception ex)
             {
-                // Let the process terminate by rethrowing; do not swallow or show UI here per constraints
-                // Rethrow to prevent any further startup
+                File.AppendAllText(@"C:\temp\BESTFLEX_STARTUP.txt", "FATAL STARTUP ERROR: " + ex + Environment.NewLine);
                 throw;
             }
-
-            // Phase 18: Data integrity validation (hard stop if unhealthy)
-            using (var integrityScope = ServiceProvider.CreateScope())
-            {
-                var integrityValidator = integrityScope.ServiceProvider.GetRequiredService<BestFlex.Application.Abstractions.IDataIntegrityValidator>();
-                var integrity = integrityValidator.ValidateAsync().GetAwaiter().GetResult();
-                if (!integrity.IsHealthy)
-                {
-                    // Enter read-only mode if supported
-                    try
-                    {
-                        var rom = integrityScope.ServiceProvider.GetService<BestFlex.Application.Abstractions.IReadOnlyModeService>() as BestFlex.Infrastructure.Diagnostics.ReadOnlyModeService;
-                        rom?.EnterReadOnlyWithLogging("Integrity / recovery failure", integrityScope.ServiceProvider);
-                    }
-                    catch { }
-                    throw new InvalidOperationException($"CRITICAL: Data integrity validation failed. {integrity.FailureReason}");
-                }
-            }
-
-            // Phase 19: Startup backup and restore simulation
-            using (var backupScope = ServiceProvider.CreateScope())
-            {
-                var backupService = backupScope.ServiceProvider.GetRequiredService<BestFlex.Application.Abstractions.IBackupService>();
-                var restoreSim = backupScope.ServiceProvider.GetRequiredService<BestFlex.Application.Abstractions.IRestoreSimulationService>();
-                var readOnly = backupScope.ServiceProvider.GetRequiredService<BestFlex.Application.Abstractions.IReadOnlyModeService>();
-
-                var backup = backupService.CreateBackupAsync().GetAwaiter().GetResult();
-                if (!backup.Success)
-                {
-                    readOnly.EnterReadOnly("Integrity / recovery failure");
-                    throw new InvalidOperationException($"CRITICAL: Startup backup failed. {backup.FailureReason}");
-                }
-
-                var canRestore = restoreSim.CanRestoreAsync(backup.BackupPath).GetAwaiter().GetResult();
-                if (!canRestore)
-                {
-                    readOnly.EnterReadOnly("Integrity / recovery failure");
-                    throw new InvalidOperationException("CRITICAL: Backup restore simulation failed.");
-                }
-            }
-
-            // Ensure DB schema exists and seed user BEFORE showing UI
-            using (var scope = ServiceProvider.CreateScope())
-            {
-                var logger = scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<App>>();
-                var db = scope.ServiceProvider.GetRequiredService<BestFlexDbContext>();
-
-                try
-                {
-                    var conn = db.Database.GetDbConnection().ConnectionString;
-                    logger.LogInformation("Database connection: {Conn}", conn);
-
-                    var tables = db.Model.GetEntityTypes().Select(e => e.GetTableName()).Where(n => !string.IsNullOrEmpty(n)).ToList();
-                    logger.LogInformation("Mapped tables: {Tables}", string.Join(',', tables));
-
-                    // Apply migrations (preferred). Falls through on success.
-                    db.Database.Migrate();
-                    logger.LogInformation("Database migrated successfully");
-                }
-                catch (Exception ex)
-                {
-                    // If migrations fail, try EnsureCreated as a fallback for dev scenarios
-                    var logger2 = scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<App>>();
-                    logger2.LogWarning(ex, "Database.Migrate() failed; attempting EnsureCreated()");
-                    try
-                    {
-                        db.Database.EnsureCreated();
-                        logger2.LogInformation("Database EnsureCreated succeeded");
-                    }
-                    catch (Exception ex2)
-                    {
-                        logger2.LogError(ex2, "Failed to create or migrate database");
-                        throw new InvalidOperationException("Database schema not created", ex2);
-                    }
-                }
-
-                // Verify Users table exists by attempting a query
-                try
-                {
-                    var cnt = db.Users.Count();
-                    logger.LogInformation("Users table row count before seeding: {Count}", cnt);
-
-                    if (cnt == 0)
-                    {
-                        // Seed default admin
-                        var user = new BestFlex.Domain.Entities.Users
-                        {
-                            Id = Guid.NewGuid(),
-                            Username = "admin",
-                            DisplayName = "Administrator",
-                            PasswordHash = BCryptNet.HashPassword("admin"),
-                            RolesCsv = "Admin",
-                            CreatedAtUtc = DateTime.UtcNow
-                        };
-                        db.Users.Add(user);
-                        db.SaveChanges();
-                        var after = db.Users.Count();
-                        logger.LogInformation("Users table row count after seeding: {Count}", after);
-                        if (after == 0)
-                            throw new InvalidOperationException("User seeding failed");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    var logger3 = scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<App>>();
-                    logger3.LogError(ex, "Users table check or seeding failed");
-                    throw new InvalidOperationException("Database schema not created", ex);
-                }
-            }
-
-            var loginWindow = ServiceProvider.GetRequiredService<LoginWindow>();
-            loginWindow.Show();
+            
         }
 
         public IServiceProvider ServiceProvider { get; private set; } = null!;
@@ -244,15 +301,26 @@ namespace BestFlex.Shell
             services.AddSingleton<BestFlex.Application.Abstractions.INavigationService, BestFlex.Shell.Services.NavigationService>();
             services.AddSingleton<BestFlex.Shell.Abstractions.IShellNavigationService, BestFlex.Shell.Services.NavigationService>();
             services.AddSingleton<BestFlex.Shell.Abstractions.IShellNavigationService, BestFlex.Shell.Services.FeatureAwareNavigationService>();
+            services.AddSingleton<BestFlex.Shell.Services.NavigationService>(); // Concrete registration for DependencyHealthService
             services.AddTransient<InvoiceDetailsWindow>();
             services.AddTransient<BestFlex.Shell.Windows.LowStockWindow>();
             services.AddTransient<BestFlex.Shell.Windows.UnpaidInvoicesWindow>();
 
             // Db + login stack
+            var dbPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "BestFlex",
+                "bestflex.db");
+            
+            // Ensure directory exists
+            Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
+            
             services.AddDbContext<BestFlexDbContext>(opt =>
-                opt.UseSqlite("Data Source=bestflex_local.db"));
+                opt.UseSqlite($"Data Source={dbPath}"));
+            // Application service registration
+            services.AddScoped<BestFlex.Application.Abstractions.ISalesService, BestFlex.Application.Services.SalesService>();
             // Ensure DbContext can receive IReadOnlyModeService if available
-            services.AddScoped<BestFlex.Application.Abstractions.IReadOnlyModeService>(sp => sp.GetService<BestFlex.Application.Abstractions.IReadOnlyModeService>() ?? null);
+            services.AddScoped<BestFlex.Application.Abstractions.IReadOnlyModeService>(sp => sp.GetService<BestFlex.Application.Abstractions.IReadOnlyModeService>()!);
             // Audit service registration
             services.AddScoped<BestFlex.Application.Abstractions.IAuditService, BestFlex.Infrastructure.Services.AuditService>();
             services.AddSingleton<ICurrentUserService, CurrentUserService>();
@@ -269,9 +337,8 @@ namespace BestFlex.Shell
             // Read services for lookup data
             services.AddScoped<BestFlex.Application.Abstractions.IProductReadService, BestFlex.Infrastructure.Services.ProductReadService>();
             services.AddScoped<BestFlex.Application.Abstractions.ICustomerReadService, BestFlex.Infrastructure.Services.CustomerReadService>();
-            services.AddScoped<BestFlex.Application.Abstractions.ISalesService, BestFlex.Infrastructure.Services.Sales.SalesService>();
             // Stock validation service required by SalesService
-            services.AddScoped<BestFlex.Application.Abstractions.IStockValidationService, BestFlex.Infrastructure.Services.StockValidationService>();
+            services.AddScoped<BestFlex.Application.Abstractions.IStockValidationService, BestFlex.Application.Services.StockValidationService>();
             
             // Statements
             services.AddScoped<BestFlex.Application.Abstractions.Statements.ICustomerStatementService,
@@ -357,6 +424,76 @@ namespace BestFlex.Shell
             }
             catch { }
             base.OnExit(e);
+        }
+
+        private static void RegisterSafeNavigation()
+        {
+            try
+            {
+                var app = (App)System.Windows.Application.Current;
+                if (app?.Services == null) return;
+                
+                var navigator = app.Services.GetService<BestFlex.Shell.Navigation.INavigator>();
+                if (navigator == null) return;
+                
+                // Register dashboard page with safe factory
+                navigator.Register("dashboard", () =>
+                {
+                    try
+                    {
+                        var vm = app.Services.GetRequiredService<BestFlex.Shell.ViewModels.DashboardViewModel>();
+                        return new BestFlex.Shell.Pages.DashboardPage(vm ?? throw new InvalidOperationException("DashboardViewModel not available"));
+                    }
+                    catch
+                    {
+                        return new BestFlex.Shell.Pages.SafeFallbackPage("Failed to create dashboard page");
+                    }
+                });
+            }
+            catch
+            {
+                // Registration failures should not crash startup
+            }
+        }
+
+        private static void ValidateThemeContract()
+        {
+            try
+            {
+                // Reflect over ThemeKeys to get all required keys
+                var themeKeysType = typeof(BestFlex.Shell.Theme.ThemeKeys);
+                var fields = themeKeysType.GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+                
+                var requiredKeys = fields
+                    .Where(f => f.FieldType == typeof(string) && f.IsLiteral)
+                    .Select(f => f.GetValue(null)?.ToString())
+                    .Where(key => !string.IsNullOrEmpty(key))
+                    .ToList();
+
+                // Load merged theme resources (System.Windows.Application.Current.Resources)
+                var appResources = System.Windows.Application.Current.Resources;
+                if (appResources == null)
+                {
+                    throw new InvalidOperationException("CRITICAL: Application.Resources is null");
+                }
+
+                var missingKeys = new List<string>();
+                foreach (var key in requiredKeys)
+                {
+                    if (key != null && !appResources.Contains(key))
+                        missingKeys.Add(key);
+                }
+
+                if (missingKeys.Any())
+                {
+                    throw new InvalidOperationException(
+                        $"CRITICAL: Theme contract validation failed. Missing keys: {string.Join(", ", missingKeys)}");
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"CRITICAL: Theme contract validation failed. {ex.Message}", ex);
+            }
         }
 
         private static void TryMigrateDatabase(IServiceProvider sp)

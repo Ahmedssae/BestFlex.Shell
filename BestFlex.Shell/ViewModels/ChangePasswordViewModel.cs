@@ -153,7 +153,7 @@ namespace BestFlex.Shell.ViewModels
                 ValidationMessage = "Password changed successfully!";
                 
                 // Close dialog after successful change
-                System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(new Action(() =>
+                await System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(new Action(() =>
                 {
                     var window = System.Windows.Application.Current?.Windows.OfType<ChangePasswordWindow>().FirstOrDefault();
                     if (window != null)
