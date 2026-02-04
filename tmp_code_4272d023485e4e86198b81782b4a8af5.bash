@@ -1,0 +1,1 @@
+sed -i 's/old_navigation_logic/new_navigation_logic/g' /path/to/project/src/Services/NavigationService.cs

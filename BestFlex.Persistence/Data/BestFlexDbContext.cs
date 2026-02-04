@@ -24,6 +24,10 @@ namespace BestFlex.Persistence.Data
         public DbSet<Product> Products => Set<Product>();
         public DbSet<Company> Companies => Set<Company>();
         public DbSet<CustomerAccount> CustomerAccounts => Set<CustomerAccount>();
+        public DbSet<SalesOrder> SalesOrders => Set<SalesOrder>();
+        public DbSet<SalesOrderLine> SalesOrderLines => Set<SalesOrderLine>();
+        public DbSet<Invoice> Invoices => Set<Invoice>();
+        public DbSet<InvoiceLine> InvoiceLines => Set<InvoiceLine>();
         public DbSet<SellingInvoice> SellingInvoices => Set<SellingInvoice>();
         public DbSet<SellingInvoiceItem> SellingInvoiceItems => Set<SellingInvoiceItem>();
         public DbSet<PrintTemplate> PrintTemplates => Set<PrintTemplate>();

@@ -22,9 +22,41 @@ namespace BestFlex.Shell.Pages
             DataContext = this;
         }
 
-        public SafeFallbackPage(string errorMessage) : this()
+        public SafeFallbackPage(string route) : this()
         {
-            ErrorMessage = errorMessage ?? "Unknown error occurred.";
+#if DEBUG
+            // In DEBUG builds, show the full route/error information for debugging
+            ErrorMessage = route switch
+            {
+                "app://sales/new" =>
+                    "Sales Order Entry is under construction.\nThis screen will be available soon.\n\nDEBUG: Route = " + route,
+
+                "app://sales/invoices" =>
+                    "Invoice module failed to load.\n\nDEBUG: Route = " + route + "\n\nCheck logs for full exception details.",
+
+                "app://core/dashboard" =>
+                    "Dashboard failed to load.\n\nDEBUG: Route = " + route,
+
+                _ =>
+                    $"The requested screen is unavailable:\n{route}\n\nDEBUG: Full error details above"
+            };
+#else
+            // In RELEASE builds, show user-friendly messages
+            ErrorMessage = route switch
+            {
+                "app://sales/new" =>
+                    "Sales Order Entry is under construction.\nThis screen will be available soon.",
+
+                "app://sales/invoices" =>
+                    "Invoice module is temporarily unavailable.",
+
+                "app://core/dashboard" =>
+                    "Dashboard failed to load.",
+
+                _ =>
+                    $"The requested screen is unavailable:\n{route}"
+            };
+#endif
         }
 
         private void ReturnToDashboard_Click(object sender, RoutedEventArgs e)

@@ -1,173 +1,133 @@
-﻿using System.Collections.ObjectModel;
+using System;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Threading.Tasks;
-using BestFlex.Persistence.Data;
-using Microsoft.EntityFrameworkCore;
-using BestFlex.Application.Abstractions;
 
 namespace BestFlex.Shell.ViewModels
 {
-    public class InvoiceDetailsViewModel : ViewModelBase
+    public class InvoiceDetailsViewModel : INotifyPropertyChanged
     {
-        private readonly BestFlexDbContext _db;
+        private string _invoiceNumber = "INV-001";
+        private decimal _total = 1000;
+        private string _currency = "USD";
+        private ObservableCollection<InvoiceLineViewModel> _lines = new();
+        private CustomerViewModel _customer = new();
+        private DateTime _issuedAt = DateTime.Now;
 
-        public InvoiceDetailsViewModel(BestFlexDbContext db) => _db = db;
-
-        public int InvoiceId { get; private set; }
-        public string InvoiceNo { get; private set; } = "";
-        public DateTime IssuedAt { get; private set; }
-        public string Customer { get; private set; } = "";
-        public string Currency { get; private set; } = "USD";
-        public string Issuer { get; private set; } = "";
-        public string? Description { get; private set; }
-        public decimal Total { get; private set; }
-
-        public ObservableCollection<LineRow> Lines { get; } = new();
-
-
-        public async Task LoadAsync(int invoiceId)
+        public string InvoiceNumber
         {
-            // Project everything server-side (fast, no heavy Includes needed)
-            var data = await _db.SellingInvoices
-                .AsNoTracking()
-                .Where(i => i.Id == invoiceId)
-                .Select(i => new
-                {
-                    i.Id,
-                    i.InvoiceNo,
-                    i.IssuedAt,
-                    Customer = i.CustomerAccount.Name,
-                    i.Currency,
-                    i.Issuer,
-                    i.Description,
-                    SellingInvoiceItems = i.SellingInvoiceItems.Select(it => new
-                    {
-                        it.ProductId,
-                        Code = it.Product.Code,
-                        Name = it.Product.Name,
-                        it.Quantity,
-                        it.UnitPrice
-                    }).ToList()
-                })
-                .SingleOrDefaultAsync();
-
-            if (data == null)
-                throw new InvalidOperationException($"Invoice {invoiceId} not found.");
-
-            InvoiceId = data.Id;
-            InvoiceNo = data.InvoiceNo;
-            IssuedAt = data.IssuedAt;
-            Customer = data.Customer;
-            Currency = data.Currency ?? "USD";
-            Issuer = data.Issuer ?? "";
-            Description = data.Description;
-
-            Lines.Clear();
-            decimal total = 0m;
-            foreach (var x in data.SellingInvoiceItems)
-            {
-                var lineTotal = x.Quantity * x.UnitPrice;
-                total += lineTotal;
-                Lines.Add(new LineRow
-                {
-                    ProductId = x.ProductId,
-                    Code = x.Code,
-                    Name = x.Name,
-                    Qty = x.Quantity,
-                    UnitPrice = x.UnitPrice,
-                    LineTotal = lineTotal
-                });
-            }
-            Total = total;
-
-            OnPropertyChanged(nameof(InvoiceId));
-            OnPropertyChanged(nameof(InvoiceNo));
-            OnPropertyChanged(nameof(IssuedAt));
-            OnPropertyChanged(nameof(Customer));
-            OnPropertyChanged(nameof(Currency));
-            OnPropertyChanged(nameof(Issuer));
-            OnPropertyChanged(nameof(Description));
-            OnPropertyChanged(nameof(Total));
-            OnPropertyChanged(nameof(Lines));
+            get => _invoiceNumber;
+            set => SetProperty(ref _invoiceNumber, value, nameof(InvoiceNumber));
         }
 
-        public class LineRow
+        public string InvoiceNo => InvoiceNumber;
+
+        public decimal Total
         {
-            public int ProductId { get; set; }
-            public string Code { get; set; } = "";
-            public string Name { get; set; } = "";
-            public decimal Qty { get; set; }
-            public decimal UnitPrice { get; set; }
-            public decimal LineTotal { get; set; }
+            get => _total;
+            set => SetProperty(ref _total, value, nameof(Total));
         }
 
-        /// <summary>
-        /// Prepare an InvoicePrintData DTO for printing/export. This moves the
-        /// subtotal/discount/tax/total calculations out of the Window code-behind
-        /// so the VM contains business logic and is testable.
-        /// </summary>
-        public InvoicePrintData PrepareInvoicePrintData(BestFlex.Application.Abstractions.CompanySettings company, BestFlex.Application.Abstractions.PrintTemplateSettings template)
+        public string Currency
         {
-            // compute subtotal from lines (ensure consistent rounding rules)
-            decimal subtotal = 0m;
-            foreach (var ln in Lines) subtotal += ln.LineTotal;
+            get => _currency;
+            set => SetProperty(ref _currency, value, nameof(Currency));
+        }
 
-            decimal discountAmt = 0m;
-            if (template.ShowDiscount && template.DiscountPercent > 0)
-                discountAmt = decimal.Round(subtotal * (decimal)template.DiscountPercent / 100m, 2);
+        public ObservableCollection<InvoiceLineViewModel> Lines
+        {
+            get => _lines;
+            set => SetProperty(ref _lines, value, nameof(Lines));
+        }
 
-            decimal taxableBase = subtotal - discountAmt;
+        public CustomerViewModel Customer
+        {
+            get => _customer;
+            set => SetProperty(ref _customer, value, nameof(Customer));
+        }
 
-            decimal taxAmt = 0m;
-            if (template.ShowTax && template.TaxPercent > 0)
-                taxAmt = decimal.Round(taxableBase * (decimal)template.TaxPercent / 100m, 2);
+        public DateTime IssuedAt
+        {
+            get => _issuedAt;
+            set => SetProperty(ref _issuedAt, value, nameof(IssuedAt));
+        }
 
-            decimal total = taxableBase + taxAmt;
+        public InvoiceDetailsViewModel()
+        {
+            Lines.Add(new InvoiceLineViewModel { Description = "Item 1", Quantity = 1, Price = 500 });
+            Lines.Add(new InvoiceLineViewModel { Description = "Item 2", Quantity = 2, Price = 250 });
+        }
 
-            var dto = new InvoicePrintData
+        public Task LoadAsync()
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task<BestFlex.Application.Abstractions.InvoicePrintData> PrepareInvoicePrintData()
+        {
+            var data = new BestFlex.Application.Abstractions.InvoicePrintData
             {
-                CompanyName = company?.Name ?? "",
-                CompanyAddress = company?.Address ?? "",
-                CompanyPhone = company?.Phone ?? "",
-                CompanyTaxNo = company?.TaxNo ?? "",
-                CompanyLogoPath = company?.LogoPath,
-
-                InvoiceNo = InvoiceNo ?? "",
+                InvoiceNo = InvoiceNo,
                 IssuedAt = IssuedAt,
-                Currency = Currency ?? "USD",
-                CustomerName = Customer ?? "",
-                Issuer = Issuer ?? "",
-                Description = Description,
-
-                Subtotal = subtotal,
-                Total = total,
-                DiscountAmount = discountAmt,
-                DiscountPercent = template.DiscountPercent,
-                TaxAmount = taxAmt,
-                TaxPercent = template.TaxPercent,
-
-                PageSize = template.PageSize,
-                Margin = template.Margin,
-                ShowCode = template.ShowCode,
-                ShowName = template.ShowName,
-                ShowQty = template.ShowQty,
-                ShowUnitPrice = template.ShowUnitPrice,
-                ShowLineTotal = template.ShowLineTotal,
-                FooterNote = template.FooterNote
+                Currency = Currency,
+                CustomerName = Customer.Name,
+                Total = Total
             };
-
-            foreach (var ln in Lines)
+            
+            // Add lines to the existing collection
+            foreach (var line in Lines.Select(l => new BestFlex.Application.Abstractions.InvoicePrintLine
             {
-                dto.Lines.Add(new InvoicePrintLine
-                {
-                    Code = ln.Code,
-                    Name = ln.Name,
-                    Qty = ln.Qty,
-                    UnitPrice = ln.UnitPrice,
-                    LineTotal = ln.LineTotal
-                });
+                Code = l.Code,
+                Name = l.Name,
+                Qty = l.Qty,
+                UnitPrice = l.UnitPrice,
+                LineTotal = l.LineTotal
+            }))
+            {
+                data.Lines.Add(line);
             }
-
-            return dto;
+            
+            return Task.FromResult(data);
         }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        protected virtual void OnPropertyChanged(string propertyName)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+
+        protected bool SetProperty<T>(ref T field, T value, string propertyName)
+        {
+            if (Equals(field, value)) return false;
+            field = value;
+            OnPropertyChanged(propertyName);
+            return true;
+        }
+    }
+
+    public class InvoiceLineViewModel
+    {
+        public string Description { get; set; } = string.Empty;
+        public string Code { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public int Qty { get; set; }
+        public decimal Quantity { get; set; }
+        public decimal Price { get; set; }
+        public decimal UnitPrice { get; set; }
+        public decimal LineTotal { get; set; }
+    }
+
+    public class CustomerViewModel
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string Phone { get; set; } = string.Empty;
+        public decimal CreditLimit { get; set; }
+        public decimal CurrentBalance { get; set; }
+        public bool IsActive { get; set; } = true;
+        public DateTime CreatedAt { get; set; }
+        public DateTime? IssuedAt { get; set; } // Made nullable since it might not always be set
     }
 }

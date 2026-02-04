@@ -1,6 +1,7 @@
 ﻿<Window x:Class="BestFlex.Shell.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:BestFlex.Shell.Controls"
         Title="BestFlex — Main Menu" Height="500" Width="980"
         WindowStartupLocation="CenterScreen">
 
@@ -59,5 +60,11 @@
                 </Grid>
             </Border>
         </Grid>
+        
+        <!-- Global Busy Overlay -->
+        <controls:BusyOverlay x:Name="GlobalBusyOverlay" 
+                              IsBusy="{Binding IsBusy}" 
+                              Message="{Binding BusyMessage}" 
+                              Detail="{Binding BusyDetail}"/>
     </DockPanel>
 </Window>

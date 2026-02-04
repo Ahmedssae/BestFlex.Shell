@@ -1,109 +1,87 @@
 using System;
-using System.Linq;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Threading.Tasks;
-using System.Windows.Input;
-using BestFlex.Application.Abstractions;
-using BestFlex.Shell.Infrastructure;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using BestFlex.Shell.Abstractions;
 
 namespace BestFlex.Shell.ViewModels
 {
-    public sealed class SafeFallbackViewModel : ViewModelBase
+    public class SafeFallbackViewModel : INotifyPropertyChanged
     {
-        private readonly ILogger<SafeFallbackViewModel> _logger;
-        private readonly IServiceProvider _services;
-        private readonly INavigationService _navigationService;
-        private string _errorMessage;
+        private string _message = "Feature not available in Phase 7A";
+        private string _failedRoute = string.Empty;
 
-        public SafeFallbackViewModel(
-            ILogger<SafeFallbackViewModel> logger,
-            IServiceProvider services,
-            INavigationService navigationService,
-            string errorMessage)
+        public string Message
         {
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _services = services ?? throw new ArgumentNullException(nameof(services));
-            _navigationService = navigationService ?? throw new ArgumentNullException(nameof(navigationService));
-            
-            // Use reflection unwrapper to get the real error message
-            if (!string.IsNullOrEmpty(errorMessage))
-            {
-                try
-                {
-                    // Try to parse as exception to unwrap reflection errors
-                    if (errorMessage.Contains("Exception"))
-                    {
-                        var parts = errorMessage.Split(':');
-                        if (parts.Length > 1)
-                        {
-                            _errorMessage = string.Join(":", parts.Skip(1)).Trim();
-                        }
-                        else
-                        {
-                            _errorMessage = ReflectionExceptionUnwrapper.GetUserFriendlyMessage(new Exception(errorMessage));
-                        }
-                    }
-                    else
-                    {
-                        _errorMessage = errorMessage;
-                    }
-                }
-                catch
-                {
-                    _errorMessage = errorMessage;
-                }
-            }
-            else
-            {
-                _errorMessage = "An unexpected error occurred.";
-            }
-
-            RetryCommand = new AsyncRelayCommand(RetryAsync);
-            ExitCommand = new RelayCommand(Exit);
+            get => _message;
+            set => SetProperty(ref _message, value, nameof(Message));
         }
 
-        public string ErrorMessage
+        public string FailedRoute
         {
-            get => _errorMessage;
-            private set => SetProperty(ref _errorMessage, value);
+            get => _failedRoute;
+            set => SetProperty(ref _failedRoute, value, nameof(FailedRoute));
         }
 
-        public ICommand RetryCommand { get; }
-        public ICommand ExitCommand { get; }
-
-        private async Task RetryAsync()
+        public SafeFallbackViewModel()
         {
-            try
-            {
-                _logger.LogInformation("SafeFallbackViewModel retry initiated");
-                
-                // Try to navigate to New Sale page as a safe default
-                _navigationService.OpenNewSale();
-                
-                _logger.LogInformation("SafeFallbackViewModel retry successful");
-                await Task.CompletedTask;
-            }
-            catch (Exception ex)
-            {
-                var unwrapped = ReflectionExceptionUnwrapper.Unwrap(ex);
-                _logger.LogError(unwrapped, "SafeFallbackViewModel retry failed");
-                ErrorMessage = ReflectionExceptionUnwrapper.GetUserFriendlyMessage(unwrapped);
-            }
         }
 
-        private void Exit()
+        public SafeFallbackViewModel(string failedRoute)
         {
-            try
+            FailedRoute = failedRoute;
+            Message = GetRouteAwareMessage(failedRoute);
+        }
+
+        public SafeFallbackViewModel(string message, string title, string description, string action)
+        {
+            Message = message;
+        }
+
+        public SafeFallbackViewModel(ILogger<SafeFallbackViewModel> logger, IServiceProvider serviceProvider, IShellNavigationService navigationService)
+        {
+            Message = "Feature not available in Phase 7A";
+        }
+
+        private string GetRouteAwareMessage(string failedRoute)
+        {
+            return failedRoute switch
             {
-                _logger.LogInformation("SafeFallbackViewModel exit requested");
-                // FORBIDDEN: Application shutdown during login transition
-                // System.Windows.Application.Current.Shutdown();
-            }
-            catch (Exception ex)
+                "app://sales/new" => "⚠️ New Sale is temporarily unavailable\n\nThe Sales Order Entry screen is currently under reconstruction.\n\nCore domain logic is active. UI is being rebuilt.\n\nPlease try again later or contact support if the problem persists.",
+                "app://sales/invoices" => "⚠️ Invoices could not be loaded\n\nThe Invoices screen is currently unavailable.\n\nPlease try again later or contact support if the problem persists.",
+                "app://core/dashboard" => "⚠️ Dashboard could not be loaded\n\nThe Dashboard screen is currently unavailable.\n\nPlease try again later or contact support if the problem persists.",
+                _ => $"⚠️ Feature Unavailable\n\n{GetFeatureName(failedRoute)} is currently unavailable due to a technical issue.\n\nPlease try again later or contact support if the problem persists."
+            };
+        }
+
+        private static string GetFeatureName(string route)
+        {
+            return route switch
             {
-                _logger.LogError(ex, "SafeFallbackViewModel exit failed");
-            }
+                "app://core/dashboard" => "Dashboard",
+                "app://sales/new" => "Sales Orders",
+                "app://sales/invoices" => "Invoices",
+                "app://sales/statements" => "Customer Statements",
+                "app://inventory/receive" => "Stock Receiving",
+                "app://core/templates" => "Template Designer",
+                _ => "Requested Feature"
+            };
+        }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        protected virtual void OnPropertyChanged(string propertyName)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+
+        protected bool SetProperty<T>(ref T field, T value, string propertyName)
+        {
+            if (Equals(field, value)) return false;
+            field = value;
+            OnPropertyChanged(propertyName);
+            return true;
         }
     }
 }

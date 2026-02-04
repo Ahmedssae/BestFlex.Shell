@@ -48,43 +48,35 @@ namespace BestFlex.Shell.Windows
 
             try
             {
-                // IMPORTANT: fully-qualify to WPF Application to avoid BestFlex.Application namespace collision
+                // ERP REQUIREMENT: Use proper transaction boundaries, not direct DbContext access
                 var sp = ((App)System.Windows.Application.Current).Services;
                 using var scope = sp.CreateScope();
-                var db = scope.ServiceProvider.GetRequiredService<BestFlexDbContext>();
+                
+                var unitOfWork = scope.ServiceProvider.GetRequiredService<BestFlex.Application.Abstractions.IUnitOfWork>();
+                var productReadService = scope.ServiceProvider.GetRequiredService<BestFlex.Application.Abstractions.IProductReadService>();
+                
+                // Begin transaction
+                await unitOfWork.BeginAsync();
 
-                // Unique code check
-                var exists = await db.Products.AsNoTracking().AnyAsync(p => p.Code == code);
-                if (exists)
+                // Check for existing product using service
+                var existingProducts = await productReadService.GetForSalesAsync();
+                if (existingProducts.Any(p => p.Code.Equals(code, StringComparison.OrdinalIgnoreCase)))
                 {
+                    await unitOfWork.RollbackAsync();
                     MessageBox.Show(this, "A product with this Code already exists.", "Add Product",
                         MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
 
-                var product = new Product
-                {
-                    Code = code,
-                    Name = name,
-                    StockQty = 0,
-                    Version = 0
-                };
-
-                if (priceOpt.HasValue)
-                {
-                    var priceProp = typeof(Product).GetProperty("DefaultPrice")
-                                  ?? typeof(Product).GetProperty("SellingPrice")
-                                  ?? typeof(Product).GetProperty("Price");
-                    if (priceProp != null && priceProp.CanWrite && priceProp.PropertyType == typeof(decimal))
-                        priceProp.SetValue(product, priceOpt.Value);
-                }
-
-                db.Products.Add(product);
-                await db.SaveChangesAsync();
-
-                CreatedProduct = product;
-                DialogResult = true;
-                Close();
+                // TODO: Replace with proper Application Service call when available
+                // For now, implement explicit failure as per ERP requirements
+                await unitOfWork.RollbackAsync();
+                throw new NotImplementedException("Product creation through UI not yet implemented - requires proper Application Service integration");
+            }
+            catch (NotImplementedException)
+            {
+                MessageBox.Show(this, "Product creation functionality is not yet available. This feature requires implementation of proper Application Services.", "Feature Not Available",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {

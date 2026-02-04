@@ -6,6 +6,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using BestFlex.Application.Abstractions.Inventory;
+using BestFlex.Domain.Exceptions;
+using BestFlex.Shell.Helpers;
 using BestFlex.Shell.Printing;
 using BestFlex.Shell.Windows;
 
@@ -103,13 +105,27 @@ namespace BestFlex.Shell.Views.Pages.Inventory
                 ResetForm();
                 txtSupplier.Text = keepSupplier;
             }
+            catch (NotImplementedException)
+            {
+                // Handle unfinished feature honestly
+                UnfinishedFeatureHelper.ShowUnfinishedFeatureMessage("Stock receiving", "This feature allows you to receive goods into inventory, create GRN documents, and update stock levels.");
+            }
+            catch (DomainException ex)
+            {
+                // Handle domain-specific business rule violations
+                MessageBox.Show($"Business rule violation: {ex.Message}\n\nPlease review your input and try again.", 
+                    "BestFlex - Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
             catch (InvalidOperationException ex)
             {
                 MessageBox.Show(ex.Message, "BestFlex", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Failed to save GRN.\n{ex.Message}", "BestFlex", MessageBoxButton.OK, MessageBoxImage.Error);
+                // Log full details for debugging while showing user-friendly message
+                System.Diagnostics.Debug.WriteLine($"GRN Save Error: {ex}");
+                MessageBox.Show("Failed to save GRN due to an unexpected error.\n\nPlease try again or contact support if the issue persists.", 
+                    "BestFlex", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 

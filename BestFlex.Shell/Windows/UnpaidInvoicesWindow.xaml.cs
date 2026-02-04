@@ -45,12 +45,12 @@ namespace BestFlex.Shell.Windows
 
         private async Task ReloadAsync(CancellationToken ct = default)
         {
-            await _vm.LoadAsync(TopN, ct);
+            await _vm.LoadAsync();
 
             // preselect
             if (_preselectCustomerId.HasValue)
             {
-                var row = _vm.Items.FirstOrDefault(x => x.CustomerAccountId == _preselectCustomerId.Value);
+                var row = _vm.Items.FirstOrDefault(x => x is BestFlex.Shell.ViewModels.UnpaidCustomerVm customer && customer.Id == _preselectCustomerId.Value) as BestFlex.Shell.ViewModels.UnpaidCustomerVm;
                 if (row != null) gridCustomers.SelectedItem = row;
                 await LoadInvoicesForSelectedAsync(ct);
             }
@@ -58,16 +58,16 @@ namespace BestFlex.Shell.Windows
 
         private async Task LoadInvoicesForSelectedAsync(CancellationToken ct = default)
         {
-            if (gridCustomers.SelectedItem is not ViewModels.UnpaidInvoicesViewModel.UnpaidCustomerVm row) return;
+            if (gridCustomers.SelectedItem is not BestFlex.Shell.ViewModels.UnpaidCustomerVm row) return;
 
             // Delegate to the ViewModel to load invoices for the selected customer
-            await _vm.LoadInvoicesForCustomerAsync(row.CustomerAccountId, ct);
+            await _vm.LoadInvoicesForCustomerAsync(row.Id);
             gridInvoices.ItemsSource = _vm.Invoices;
         }
 
         private void OpenStatement_Click(object sender, RoutedEventArgs e)
         {
-            var selectedCustomer = gridCustomers.SelectedItem as ViewModels.UnpaidInvoicesViewModel.UnpaidCustomerVm;
+            var selectedCustomer = gridCustomers.SelectedItem as BestFlex.Shell.ViewModels.UnpaidCustomerVm;
             if (selectedCustomer == null)
             {
                 MessageBox.Show(this, "Select a customer first.", "Unpaid Invoices",
@@ -78,7 +78,7 @@ namespace BestFlex.Shell.Windows
             // Use navigation service from DI instead of constructing windows here.
             var app = (App)System.Windows.Application.Current;
             var nav = app.Services.GetService<BestFlex.Application.Abstractions.INavigationService>();
-            nav?.OpenAccountStatement(selectedCustomer.CustomerAccountId);
+            nav?.OpenAccountStatement(selectedCustomer.Id);
         }
 
 

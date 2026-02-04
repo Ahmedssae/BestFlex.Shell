@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BestFlex.Application\BestFlex.Application.csproj" />
+    <ProjectReference Include="..\BestFlex.Application.Abstractions\BestFlex.Application.Abstractions.csproj" />
+    <ProjectReference Include="..\BestFlex.Domain\BestFlex.Domain.csproj" />
+    <ProjectReference Include="..\BestFlex.Infrastructure\BestFlex.Infrastructure.csproj" />
+    <ProjectReference Include="..\BestFlex.Persistence\BestFlex.Persistence.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.8" />
+  </ItemGroup>
+
+</Project>

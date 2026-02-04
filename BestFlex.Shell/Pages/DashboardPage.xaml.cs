@@ -38,6 +38,10 @@ namespace BestFlex.Shell.Pages
             ThemeText = UserPrefs.Current.Theme == "Dark" ? "Dark" : "Light";
         }
 
+        public DashboardPage() : this(new ViewModels.DashboardViewModel())
+        {
+        }
+
         // Events
         private async void UserControl_Loaded(object sender, RoutedEventArgs e)
         {

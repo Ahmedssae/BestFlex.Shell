@@ -7,10 +7,11 @@ using System.Windows.Media;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using BestFlex.Shell.Pages;
+using BestFlex.Shell.Abstractions;
 
 namespace BestFlex.Shell
 {
-    public partial class MainWindow : Window
+    public partial class MainWindow : Window, IMainContentHost
     {
         private readonly ILogger<MainWindow>? _logger;
 
@@ -37,7 +38,24 @@ namespace BestFlex.Shell
             }
         }
 
-        public void InitializeShell()
+        // SINGLE CONTENT HOST CONTRACT
+        public void Show(object view)
+        {
+            // Find the content host (second child of main grid)
+            if (Content is Grid mainGrid && mainGrid.Children.Count > 1)
+            {
+                var contentHost = mainGrid.Children[1] as ContentControl;
+                if (contentHost != null)
+                {
+                    contentHost.Content = view;
+                    return;
+                }
+            }
+            
+            throw new InvalidOperationException("Content host not found in MainWindow");
+        }
+
+        public async Task InitializeShell()
         {
             try
             {
@@ -47,20 +65,25 @@ namespace BestFlex.Shell
                 var app = (App)System.Windows.Application.Current;
                 var vm = app.Services.GetRequiredService<BestFlex.Shell.ViewModels.MainWindowViewModel>();
                 
-                // Check for unavailable CORE features only - this is the only place we should ever block startup
-                var unavailableCoreFeatures = vm.GetUnavailableCoreFeatures();
+                // Log available features for debugging but do NOT block startup
+                var unavailableCoreFeatures = await vm.GetUnavailableCoreFeatures();
                 if (unavailableCoreFeatures.Any())
                 {
-                    var featureNames = string.Join(", ", unavailableCoreFeatures.Select(f => f.Name));
-                    var message = $"Core ERP features unavailable: {featureNames}. Application cannot continue.";
-                    _logger?.LogCritical("Core features unavailable: {FeatureNames}", featureNames);
-                    MessageBox.Show(message, "Critical Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                    Close();
-                    return;
+                    var featureNames = string.Join(", ", unavailableCoreFeatures);
+                    _logger?.LogWarning("Some features not available: {FeatureNames}", featureNames);
+                    // DO NOT block startup - ERP must be resilient
                 }
 
                 // Load ViewModel data - this will check its own feature availability
-                vm.LoadAsync().GetAwaiter().GetResult();
+                try
+                {
+                    await vm.LoadAsync();
+                }
+                catch (Exception loadEx)
+                {
+                    _logger?.LogError(loadEx, "Failed to load ViewModel data during initialization");
+                    // Continue initialization even if VM loading fails
+                }
                 
                 // Hide template entries if not admin
                 if (!vm.IsAdmin)
@@ -75,33 +98,55 @@ namespace BestFlex.Shell
                 _logger?.LogError(ex, "Failed to initialize shell");
                 MessageBox.Show($"Failed to initialize shell: {ex.Message}", "Error", 
                     MessageBoxButton.OK, MessageBoxImage.Error);
+                // Re-throw to allow caller to handle the failure
+                throw;
             }
         }
 
         public void NavigateToInitialPage()
         {
+            // EXPLICIT NAVIGATION: No routes, no strings, no fallbacks
             try
             {
                 _logger?.LogInformation("MainWindow.NavigateToInitialPage started");
                 
                 var app = (App)System.Windows.Application.Current;
-                var navigationService = app.Services.GetService<BestFlex.Shell.Abstractions.IShellNavigationService>();
+                var viewFactory = app.Services.GetRequiredService<BestFlex.Shell.Factories.ViewFactory>();
                 
-                if (navigationService != null)
-                {
-                    navigationService.NavigateToDashboard();
-                    _logger?.LogInformation("MainWindow.NavigateToInitialPage completed successfully");
-                }
-                else
-                {
-                    throw new InvalidOperationException("Navigation service not available");
-                }
+                // DETERMINISTIC: Direct factory call
+                this.Show(viewFactory.CreateDashboard());
+                
+                _logger?.LogInformation("MainWindow.NavigateToInitialPage completed successfully");
             }
             catch (Exception ex)
             {
                 _logger?.LogError(ex, "Failed to navigate to initial page");
-                // Show fallback page directly
-                MainHost.Content = new SafeFallbackPage($"Navigation failed: {ex.Message}");
+                
+                // TEMPORARY: Show simple fallback instead of crashing
+                try
+                {
+                    var fallbackText = new TextBlock 
+                    { 
+                        Text = "Application loading... Please wait.",
+                        FontSize = 16,
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Margin = new Thickness(20)
+                    };
+                    
+                    if (Content is Grid mainGrid && mainGrid.Children.Count > 1)
+                    {
+                        var contentHost = mainGrid.Children[1] as ContentControl;
+                        if (contentHost != null)
+                        {
+                            contentHost.Content = fallbackText;
+                        }
+                    }
+                }
+                catch
+                {
+                    // Last resort - do nothing
+                }
             }
         }
 

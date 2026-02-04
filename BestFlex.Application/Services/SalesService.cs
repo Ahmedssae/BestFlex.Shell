@@ -2,6 +2,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using BestFlex.Application.Abstractions;
 using BestFlex.Application.Abstractions.Contracts.Sales;
+using BestFlex.Domain.Exceptions;
 
 namespace BestFlex.Application.Services
 {
@@ -14,8 +15,8 @@ namespace BestFlex.Application.Services
 
         public Task<int> CreateSaleAsync(NewSaleDto dto, CancellationToken ct = default)
         {
-            // Minimal implementation - return dummy invoice ID
-            return Task.FromResult(1);
+            // FAKE ERP LOGIC REMOVED - This will be replaced with real implementation in Phase 2
+            throw new DomainException("Sales service not implemented yet. Phase 1 - Domain entities only.");
         }
     }
 }

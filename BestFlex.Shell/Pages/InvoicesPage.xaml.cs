@@ -144,7 +144,7 @@ namespace BestFlex.Shell.Pages
         private void BtnExportCsv_Click(object sender, RoutedEventArgs e)
         {
             // Specify concrete type parameter to help type inference
-            var cols = new (string, Func<BestFlex.Shell.Pages.InvoicesPageViewModel.InvoiceRow, object?>)[]
+            var cols = new (string, Func<BestFlex.Shell.Pages.InvoiceRow, object?>)[]
             {
                 ("InvoiceNo", r => r.InvoiceNo),
                 ("IssuedAt",  r => r.IssuedAt.ToString("yyyy-MM-dd HH:mm")),
@@ -153,7 +153,7 @@ namespace BestFlex.Shell.Pages
                 ("Amount",    r => r.Amount),
                 ("Currency",  r => r.Currency)
             };
-            CsvExporter.Export<BestFlex.Shell.Pages.InvoicesPageViewModel.InvoiceRow>(_vm.Rows, cols, "invoices.csv");
+            CsvExporter.Export<BestFlex.Shell.Pages.InvoiceRow>(_vm.Rows, cols, "invoices.csv");
         }
 
         private void BtnPrint_Click(object sender, RoutedEventArgs e)
@@ -302,7 +302,7 @@ namespace BestFlex.Shell.Pages
 
         private void OpenPreviewForSelected()
         {
-            if (grid.SelectedItem is not BestFlex.Shell.Pages.InvoicesPageViewModel.InvoiceRow row) return;
+            if (grid.SelectedItem is not BestFlex.Shell.Pages.InvoiceRow row) return;
 
             var w = new BestFlex.Shell.Windows.InvoicePreviewWindow(row.Id)
             {

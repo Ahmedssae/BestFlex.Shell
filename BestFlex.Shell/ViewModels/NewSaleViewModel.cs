@@ -1,652 +1,475 @@
-﻿using System;
+using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Input;
-using BestFlex.Application.Abstractions;
-using BestFlex.Application.Contracts.Sales;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using BestFlex.Domain.Entities;
+using BestFlex.Shell.Services;
 
 namespace BestFlex.Shell.ViewModels
 {
-    public sealed class NewSaleViewModel : ViewModelBase
+    // PHASE 3: Validation Components
+    public class NewSaleValidationError
     {
-        private readonly ISalesService _sales;
-        private readonly IServiceProvider _sp;
-        private readonly IPermissionService _permissions;
-        private readonly IAuditService _audit;
-        private readonly IErrorService _error;
-        private readonly ILogger<NewSaleViewModel> _logger;
-        private readonly IAuthorizationService _authorization;
-        private bool _isBusy;
-        private int? _lastInvoiceId;
-        private readonly SemaphoreSlim _loadLock = new(1, 1);
-        private bool _isFeatureAvailable;
-        private string? _featureUnavailableReason;
-        private bool _isExecuting;
-        private bool _canCreateSale;
-
-        public Guid OperationId { get; } = Guid.NewGuid();
-
-        public bool IsExecuting
-        {
-            get => _isExecuting;
-            private set => SetProperty(ref _isExecuting, value);
-        }
-
-        public bool CanCreateSale => _canCreateSale && !IsBusy && !IsExecuting;
-
-        private bool CanSave() => SelectedCustomerId.HasValue && Lines.All(l => l.ProductId > 0 && l.Quantity > 0 && l.UnitPrice >= 0) && !IsExecuting && !IsBusy && HasCreateSalePermission;
-
-        public NewSaleViewModel(
-            IServiceProvider sp,
-            ISalesService sales,
-            IPermissionService permissions,
-            IAuditService audit,
-            IErrorService error,
-            ILogger<NewSaleViewModel> logger,
-            IAuthorizationService authorization)
-        {
-            // CORE REQUIRED dependencies - no GetService, no null checks
-            _sp = sp ?? throw new ArgumentNullException(nameof(sp));
-            _sales = sales ?? throw new ArgumentNullException(nameof(sales));
-            _permissions = permissions ?? throw new ArgumentNullException(nameof(permissions));
-            _audit = audit ?? throw new ArgumentNullException(nameof(audit));
-            _error = error ?? throw new ArgumentNullException(nameof(error));
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _authorization = authorization ?? throw new ArgumentNullException(nameof(authorization));
-                
-                // Initialize commands (READ-ONLY operations only)
-                SaveCommand = new AsyncRelayCommand(SaveAsync, () => CanSave());
-                AddLineCommand = new AsyncRelayCommand(AddLineAsync, () => !IsBusy && HasCreateSalePermission && SelectedProduct != null && Qty > 0);
-                RemoveLineCommand = new AsyncRelayCommand<SaleLineVm>(RemoveLine, _ => !IsBusy && HasCreateSalePermission);
-                RecalculateCommand = new AsyncRelayCommand(() => { RecalculateSubtotal(); return Task.CompletedTask; }, () => !IsBusy && HasCreateSalePermission);
-                
-                // listen for collection changes to update totals automatically
-                Lines.CollectionChanged += Lines_CollectionChanged;
-        }
-
-        private CustomerItem? _selectedCustomer;
-        private int? _selectedCustomerId;
-        
-        public CustomerItem? SelectedCustomer 
-        { 
-            get => _selectedCustomer; 
-            set 
-            { 
-                if (SetProperty(ref _selectedCustomer, value)) 
-                {
-                    SelectedCustomerId = value?.Id;
-                    OnValidationChanged();
-                }
-            } 
-        }
-        
-        public int? SelectedCustomerId 
-        { 
-            get => _selectedCustomerId; 
-            set 
-            { 
-                if (SetProperty(ref _selectedCustomerId, value)) 
-                {
-                    OnValidationChanged();
-                }
-            } 
-        }
-
-        private ProductVm? _selectedProduct;
-        public ProductVm? SelectedProduct
-        {
-            get => _selectedProduct;
-            set
-            {
-                if (SetProperty(ref _selectedProduct, value))
-                {
-                    // When product changes, update current line or create new one
-                    if (value != null && Lines.Any())
-                    {
-                        var lastLine = Lines.Last();
-                        lastLine.ProductId = value.Id;
-                        // ProductName will be updated automatically via ProductId setter
-                    }
-                    // Update command CanExecute
-                    AddLineCommand?.RaiseCanExecuteChanged();
-                }
-            }
-        }
-
-        public string? ProductInput { get; set; }
-        
-        private decimal _qty = 1m;
-        public decimal Qty 
-        { 
-            get => _qty; 
-            set 
-            { 
-                if (SetProperty(ref _qty, value)) 
-                {
-                    // When qty changes, update the current line if exists
-                    if (Lines.Any())
-                    {
-                        var lastLine = Lines.Last();
-                        lastLine.Quantity = value;
-                    }
-                    // Update command CanExecute
-                    AddLineCommand?.RaiseCanExecuteChanged();
-                }
-            } 
-        }
-
-        public int? CustomerId { get; set; }
-        public DateTime InvoiceDate { get; set; } = DateTime.Now;
-        public string Currency { get; set; } = "USD";
-        public string? Notes { get; set; }
-
-        public ObservableCollection<SaleLineVm> Lines { get; } = new();
-
-        public ObservableCollection<ProductVm> Products { get; } = new();
-        public ObservableCollection<CustomerItem> Customers { get; } = new();
-
-        private decimal _subtotal;
-        public decimal Subtotal { get => _subtotal; private set { SetProperty(ref _subtotal, value); } }
-
-        public int ItemsCount => (int)Lines.Sum(l => l.Quantity);
-
-        public bool IsBusy
-        {
-            get => _isBusy;
-            private set
-            {
-                if (SetProperty(ref _isBusy, value))
-                {
-                    // ensure command state reflects busy flag
-                    SaveCommand?.RaiseCanExecuteChanged();
-                }
-            }
-        }
-
-        public int? LastInvoiceId { get => _lastInvoiceId; private set => SetProperty(ref _lastInvoiceId, value); }
-
-        public bool IsFeatureAvailable
-        {
-            get => _isFeatureAvailable;
-            private set => SetProperty(ref _isFeatureAvailable, value);
-        }
-
-        public string? FeatureUnavailableReason
-        {
-            get => _featureUnavailableReason;
-            private set => SetProperty(ref _featureUnavailableReason, value);
-        }
-
-        // Permission properties
-        public bool HasCreateSalePermission => _authorization.HasPermissionAsync(Permission.CreateSale).Result;
-        
-        public AsyncRelayCommand SaveCommand { get; }
-        public AsyncRelayCommand AddLineCommand { get; }
-        public AsyncRelayCommand<SaleLineVm> RemoveLineCommand { get; }
-        public AsyncRelayCommand RecalculateCommand { get; }
-
-        private void OnValidationChanged()
-        {
-            // notify bindings
-            OnPropertyChanged(nameof(CanSave));
-            // raise command state
-            SaveCommand?.RaiseCanExecuteChanged();
-            // update validation message
-            var msg = ComputeValidationMessage();
-            if (!string.Equals(_validationMessage, msg, StringComparison.Ordinal))
-            {
-                SetProperty(ref _validationMessage, msg, nameof(ValidationMessage));
-            }
-        }
-
-        private string? _validationMessage;
-        public string? ValidationMessage { get => _validationMessage; }
-
-        private string? ComputeValidationMessage()
-        {
-            if (!SelectedCustomerId.HasValue)
-                return "Select a customer";
-            if (!Lines.Any())
-                return "Add at least one product";
-            if (Lines.Any(l => l.ProductId <= 0 || l.Quantity <= 0 || l.UnitPrice < 0))
-                return "Fix invalid quantities or prices";
-            return null;
-        }
-
-        public async Task InitializeAsync() 
-        { 
-            try
-            {
-                _logger?.LogInformation("NewSaleViewModel.InitializeAsync started for OperationId: {OperationId}", OperationId);
-                
-                // Validate authorization FIRST
-                var hasPermission = await _authorization.HasPermissionAsync(Permission.CreateSale);
-                if (!hasPermission)
-                {
-                    var reason = await _authorization.GetPermissionDeniedReasonAsync(Permission.CreateSale);
-                    throw new UserFriendlyException(reason ?? "You do not have permission to create sales.");
-                }
-                
-                _canCreateSale = true; // Set permission flag
-                
-                // Check feature availability (moved from constructor)
-                CheckFeatureAvailability();
-                
-                if (!IsFeatureAvailable)
-                {
-                    throw new InvalidOperationException(FeatureUnavailableReason ?? "Sales feature not available");
-                }
-                
-                await LoadLookupsAsync();
-                
-                _logger?.LogInformation("NewSaleViewModel.InitializeAsync completed for OperationId: {OperationId}", OperationId);
-            }
-            catch (UserFriendlyException)
-            {
-                // Re-throw user-friendly exceptions as-is
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogError(ex, "NewSaleViewModel.InitializeAsync failed for OperationId: {OperationId}", OperationId);
-                throw new UserFriendlyException($"Failed to initialize sales module: {ex.Message}", ex);
-            }
-        }
-
-        public async Task LoadLookupsAsync()
-        {
-            if (IsBusy) return;
-            
-            await _loadLock.WaitAsync();
-            try
-            {
-                if (IsBusy) return; // Double-check pattern
-                IsBusy = true;
-                
-                using var scope = _sp.CreateScope();
-                var productReadService = scope.ServiceProvider.GetRequiredService<IProductReadService>();
-                var customerReadService = scope.ServiceProvider.GetRequiredService<ICustomerReadService>();
-                
-                // Load customers using read service
-                var customers = await customerReadService.GetForSalesAsync();
-                Customers.Clear();
-                foreach (var c in customers) 
-                {
-                    Customers.Add(new CustomerItem { Id = c.Id, Name = c.Name });
-                }
-                _logger.LogInformation("Loaded {Count} customers for sales", Customers.Count);
-                
-                if (!Customers.Any())
-                {
-                    _logger.LogWarning("No customers available for sales");
-                    _error.HandleUserError("No customers available. Please create customers first.", "Data Unavailable");
-                }
-
-                // Load products using read service
-                var products = await productReadService.GetForSalesAsync();
-                Products.Clear();
-                foreach (var p in products)
-                {
-                    Products.Add(new ProductVm
-                    {
-                        Id = p.Id,
-                        Code = p.Code,
-                        Name = p.Name,
-                        StockQty = p.StockQty,
-                        DefaultPrice = p.Price
-                    });
-                }
-                _logger.LogInformation("Loaded {Count} products for sales", Products.Count);
-                
-                if (!Products.Any())
-                {
-                    _logger.LogWarning("No products available for sales");
-                    _error.HandleUserError("No products available. Please add products to inventory first.", "Data Unavailable");
-                }
-            }
-            catch (Exception ex)
-            {
-                _error.Handle(ex, "NewSaleViewModel.LoadLookupsAsync");
-            }
-            finally
-            {
-                IsBusy = false;
-                _loadLock.Release();
-            }
-        }
-
-        public async Task AddLineAsync()
-        {
-            try
-            {
-                _logger.LogInformation("AddLineAsync started");
-                
-                if (!IsFeatureAvailable)
-                {
-                    throw new InvalidOperationException(FeatureUnavailableReason ?? "Sales feature not available");
-                }
-                
-                if (SelectedProduct == null) return;
-                
-                var line = new SaleLineVm(this);
-                line.ProductId = SelectedProduct.Id;
-                line.Quantity = Qty;
-                line.UnitPrice = SelectedProduct.DefaultPrice;
-                
-                Lines.Add(line);
-                
-                // Reset selection for next line
-                SelectedProduct = null;
-                Qty = 1m;
-                
-                // subscription will be handled by CollectionChanged handler, but ensure totals updated
-                await Task.CompletedTask;
-                RecalculateSubtotal();
-                OnValidationChanged();
-                
-                _logger.LogInformation("AddLineAsync completed successfully");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "AddLineAsync failed");
-                _error.Handle(ex, "Failed to add line");
-            }
-        }
-
-        public Task RemoveLine(SaleLineVm vm)
-        {
-            if (vm == null) return Task.CompletedTask;
-            Lines.Remove(vm);
-            // Recalculate will be triggered by collection change handler; ensure update
-            RecalculateSubtotal();
-            OnValidationChanged();
-            return Task.CompletedTask;
-        }
-
-        internal void OnLineChanged() => RecalculateSubtotal();
-
-        private void RecalculateSubtotal()
-        {
-            var subtotal = Math.Round(Lines.Sum(l => l.LineTotal), 2, MidpointRounding.AwayFromZero);
-            Subtotal = subtotal;
-            // Discount amount
-            DiscountAmount = DiscountPercent > 0 ? Math.Round(subtotal * (DiscountPercent / 100m), 2) : 0m;
-            var taxableBase = subtotal - DiscountAmount;
-            TaxAmount = TaxPercent > 0 ? Math.Round(taxableBase * (TaxPercent / 100m), 2) : 0m;
-            Total = taxableBase + TaxAmount;
-
-            OnPropertyChanged(nameof(ItemsCount));
-            OnPropertyChanged(nameof(Subtotal));
-            OnPropertyChanged(nameof(DiscountAmount));
-            OnPropertyChanged(nameof(TaxAmount));
-            OnPropertyChanged(nameof(Total));
-        }
-
-        private void Lines_CollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
-        {
-            if (e == null) return;
-            if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add && e.NewItems != null)
-            {
-                foreach (var it in e.NewItems.OfType<SaleLineVm>()) SubscribeLine(it);
-            }
-            else if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Remove && e.OldItems != null)
-            {
-                foreach (var it in e.OldItems.OfType<SaleLineVm>()) UnsubscribeLine(it);
-            }
-            else if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Replace)
-            {
-                if (e.OldItems != null) foreach (var it in e.OldItems.OfType<SaleLineVm>()) UnsubscribeLine(it);
-                if (e.NewItems != null) foreach (var it in e.NewItems.OfType<SaleLineVm>()) SubscribeLine(it);
-            }
-            else if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Reset)
-            {
-                // clear all subscriptions
-                // best-effort: unsubscribe by iterating existing items (collection is cleared)
-                // nothing to do because items removed; ensure subtotal update
-            }
-
-            RecalculateSubtotal();
-            // Update SaveCommand CanExecute when Lines collection changes
-            SaveCommand?.RaiseCanExecuteChanged();
-            OnValidationChanged();
-        }
-
-        private void SubscribeLine(SaleLineVm line)
-        {
-            if (line == null) return;
-            line.PropertyChanged += Line_PropertyChanged;
-            // also listen for validation-relevant changes
-            line.PropertyChanged += Line_ValidationPropertyChanged;
-        }
-
-        private void UnsubscribeLine(SaleLineVm line)
-        {
-            if (line == null) return;
-            line.PropertyChanged -= Line_PropertyChanged;
-            line.PropertyChanged -= Line_ValidationPropertyChanged;
-        }
-
-        private void Line_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
-        {
-            if (e == null) return;
-            // respond to changes that affect totals
-            if (e.PropertyName == nameof(SaleLineVm.Quantity) || e.PropertyName == nameof(SaleLineVm.UnitPrice) || e.PropertyName == nameof(SaleLineVm.LineTotal))
-            {
-                RecalculateSubtotal();
-            }
-        }
-
-        private void Line_ValidationPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
-        {
-            if (e == null) return;
-            if (e.PropertyName == nameof(SaleLineVm.Quantity) || e.PropertyName == nameof(SaleLineVm.UnitPrice) || e.PropertyName == nameof(SaleLineVm.ProductId))
-            {
-                OnValidationChanged();
-            }
-        }
-
-        public async Task SaveAsync()
-        {
-            try
-            {
-                _logger.LogInformation("SaveAsync started");
-                
-                if (!IsFeatureAvailable)
-                {
-                    throw new InvalidOperationException(FeatureUnavailableReason ?? "Sales feature not available");
-                }
-                
-                if (!CanSave()) return;
-                
-                IsBusy = true;
-                IsExecuting = true;
-                
-                var dto = new NewSaleDto
-                {
-                    CustomerId = SelectedCustomerId,
-                    InvoiceDate = InvoiceDate,
-                    Currency = Currency,
-                    Notes = Notes,
-                    Items = Lines.Select(l => new NewSaleItemDto
-                    {
-                        ProductId = l.ProductId,
-                        Quantity = l.Quantity,
-                        UnitPrice = l.UnitPrice
-                    }).ToList()
-                };
-                
-                var invoiceId = await _sales.CreateSaleAsync(dto);
-                LastInvoiceId = invoiceId;
-                
-                // Audit the sale creation
-                await _audit.LogActionAsync("SaleCreated", "SellingInvoice", invoiceId);
-                
-                _logger.LogInformation("SaveAsync completed successfully with invoice ID {InvoiceId}", invoiceId);
-                
-                // Close window after successful save
-                var window = System.Windows.Application.Current.Windows.OfType<Window>()
-                    .FirstOrDefault(w => w.DataContext == this);
-                window?.Close();
-                Notes = null;
-                OnPropertyChanged(nameof(Notes));
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "NewSaleViewModel.SaveAsync failed");
-                _error.Handle(ex, "Failed to save sale");
-            }
-            finally
-            {
-                IsBusy = false;
-                IsExecuting = false;
-            }
-        }
-
-        private void CheckFeatureAvailability()
-        {
-            try
-            {
-                // Check if required services are available
-                var productReadService = _sp.GetService<IProductReadService>();
-                var customerReadService = _sp.GetService<ICustomerReadService>();
-
-                if (productReadService == null || customerReadService == null)
-                {
-                    IsFeatureAvailable = false;
-                    FeatureUnavailableReason = "Sales services not available";
-                    return;
-                }
-
-                // NOTE: Permission check moved to InitializeAsync() to avoid constructor work
-                // This method now only checks service availability
-
-                IsFeatureAvailable = true;
-                FeatureUnavailableReason = null;
-                _logger.LogInformation("Sales feature availability check passed");
-            }
-            catch (Exception ex)
-            {
-                var unwrapped = ReflectionExceptionUnwrapper.Unwrap(ex);
-                _logger.LogError(unwrapped, "Sales feature availability check failed");
-                IsFeatureAvailable = false;
-                FeatureUnavailableReason = "Feature availability check failed";
-            }
-        }
-
-        // Additional properties for calculations
-        private decimal _discountPercent;
-        public decimal DiscountPercent { get => _discountPercent; set { if (SetProperty(ref _discountPercent, value)) RecalculateSubtotal(); } }
-
-        private decimal _taxPercent;
-        public decimal TaxPercent { get => _taxPercent; set { if (SetProperty(ref _taxPercent, value)) RecalculateSubtotal(); } }
-
-        private decimal _discountAmount;
-        public decimal DiscountAmount { get => _discountAmount; private set => SetProperty(ref _discountAmount, value); }
-
-        private decimal _taxAmount;
-        public decimal TaxAmount { get => _taxAmount; private set => SetProperty(ref _taxAmount, value); }
-
-        private decimal _total;
-        public decimal Total { get => _total; private set => SetProperty(ref _total, value); }
+        public string Code { get; set; } = string.Empty;
+        public string Message { get; set; } = string.Empty;
+        public string Field { get; set; } = string.Empty;
     }
 
-    public sealed class SaleLineVm : ViewModelBase
+    public class NewSaleValidationResult
     {
-        private readonly NewSaleViewModel _owner;
+        public bool IsValid => !Errors.Any();
+        public List<NewSaleValidationError> Errors { get; set; } = new();
+    }
 
-        public SaleLineVm(NewSaleViewModel owner)
+    // PHASE 2: Domain Models (Offline Brain)
+    public class SalesOrderDraft
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string CustomerName { get; set; } = string.Empty;
+        public DateTime OrderDate { get; set; } = DateTime.Today;
+        public string Currency { get; set; } = "USD";
+        public ObservableCollection<SalesOrderLineDraftViewModel> Lines { get; set; } = new();
+        
+        public decimal Subtotal => Lines.Sum(l => l.LineTotal);
+        public decimal Tax => Subtotal * 0.10m; // 10% hardcoded
+        public decimal GrandTotal => Subtotal + Tax;
+    }
+
+    public class SalesOrderLineDraftViewModel : INotifyPropertyChanged
+    {
+        private Guid _lineId = Guid.NewGuid();
+        private string _description = string.Empty;
+        private decimal _quantity = 1;
+        private decimal _unitPrice = 0;
+
+        public Guid LineId
         {
-            _owner = owner;
+            get => _lineId;
+            set => _lineId = value;
         }
 
-        private int _productId;
-        public int ProductId
+        public string Description
         {
-            get => _productId;
+            get => _description;
             set
             {
-                if (SetProperty(ref _productId, value))
+                if (_description != value)
                 {
-                    // auto-fill from owner's product list
-                    var p = _owner.Products.FirstOrDefault(x => x.Id == _productId);
-                    if (p != null)
-                    {
-                        ProductName = p.Name;
-                        if (UnitPrice == 0m) UnitPrice = p.DefaultPrice;
-                        if (Quantity == 0m) Quantity = 1m;
-                    }
-                    _owner.OnLineChanged();
-                    OnPropertyChanged(nameof(LineTotal));
-                    OnPropertyChanged(nameof(ProductCode)); // Notify ProductCode change
+                    _description = value;
+                    OnPropertyChanged(nameof(Description));
                 }
             }
         }
 
-        private string _productName = "";
-        public string ProductName { get => _productName; private set => SetProperty(ref _productName, value); }
-        
-        public string ProductCode 
-        { 
-            get 
-            { 
-                var p = _owner.Products.FirstOrDefault(x => x.Id == _productId);
-                return p?.Code ?? string.Empty;
-            } 
-        }
-
-        private decimal _quantity;
         public decimal Quantity
         {
             get => _quantity;
             set
             {
-                var v = value < 0 ? 0 : value;
-                if (SetProperty(ref _quantity, v))
+                if (_quantity != value)
                 {
-                    _owner.OnLineChanged();
+                    _quantity = value;
+                    OnPropertyChanged(nameof(Quantity));
                     OnPropertyChanged(nameof(LineTotal));
                 }
             }
         }
 
-        private decimal _unitPrice;
         public decimal UnitPrice
         {
             get => _unitPrice;
             set
             {
-                var v = value < 0 ? 0 : value;
-                if (SetProperty(ref _unitPrice, v))
+                if (_unitPrice != value)
                 {
-                    _owner.OnLineChanged();
+                    _unitPrice = value;
+                    OnPropertyChanged(nameof(UnitPrice));
                     OnPropertyChanged(nameof(LineTotal));
                 }
             }
         }
 
-        public decimal LineTotal => Math.Round(Quantity * UnitPrice, 2, MidpointRounding.AwayFromZero);
+        public decimal LineTotal => Quantity * UnitPrice;
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        protected virtual void OnPropertyChanged(string propertyName)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
     }
 
-    public sealed class ProductVm
+    // PHASE 5: ViewModel with Posting & Integration
+    public class NewSaleViewModel : INotifyPropertyChanged, IDisposable
     {
-        public int Id { get; set; }
-        public string Code { get; set; } = "";
-        public string Name { get; set; } = "";
-        public decimal StockQty { get; set; }
-        public decimal DefaultPrice { get; set; }
+        private readonly INewSaleDraftSession _session;
+        private readonly SalesOrderDraftService? _draftService;
+        private readonly PostingService? _postingService;
+        private readonly ILogger<NewSaleViewModel>? _logger;
+        private bool _canSaveDraft;
+        private bool _canPostOrder;
+        private NewSaleValidationResult _validationResult = new();
+        private readonly NotifyCollectionChangedEventHandler _linesCollectionChangedHandler;
 
-        public string Display => string.IsNullOrWhiteSpace(Code) ? Name : $"{Code} — {Name}";
-    }
+        public NewSaleViewModel(
+            INewSaleDraftSession session,
+            SalesOrderDraftService? draftService = null, 
+            PostingService? postingService = null,
+            ILogger<NewSaleViewModel>? logger = null)
+        {
+            _session = session ?? throw new ArgumentNullException(nameof(session));
+            _draftService = draftService;
+            _postingService = postingService;
+            _logger = logger;
+            
+            // Store handler for disposal
+            _linesCollectionChangedHandler = (_, _) => 
+            {
+                UpdateTotalsAndButtonState();
+                ValidateOrder();
+            };
+            
+            Lines.CollectionChanged += _linesCollectionChangedHandler;
+        }
 
-    public sealed class CustomerItem
-    {
-        public int Id { get; set; }
-        public string Name { get; set; } = "";
+        // Properties for UI binding
+        public string CustomerName
+        {
+            get => _session.Draft.CustomerName;
+            set
+            {
+                if (_session.Draft.CustomerName != value)
+                {
+                    _session.Draft.CustomerName = value;
+                    OnPropertyChanged(nameof(CustomerName));
+                    ValidateOrder();
+                }
+            }
+        }
+
+        public DateTime OrderDate
+        {
+            get => _session.Draft.OrderDate;
+            set
+            {
+                if (_session.Draft.OrderDate != value)
+                {
+                    _session.Draft.OrderDate = value;
+                    OnPropertyChanged(nameof(OrderDate));
+                }
+            }
+        }
+
+        public string Currency
+        {
+            get => _session.Draft.Currency;
+            set
+            {
+                if (_session.Draft.Currency != value)
+                {
+                    _session.Draft.Currency = value;
+                    OnPropertyChanged(nameof(Currency));
+                    ValidateOrder();
+                }
+            }
+        }
+
+        public ObservableCollection<SalesOrderLineDraftViewModel> Lines => _session.Draft.Lines;
+
+        public decimal Subtotal => _session.Draft.Subtotal;
+        public decimal Tax => _session.Draft.Tax;
+        public decimal GrandTotal => _session.Draft.GrandTotal;
+
+        public bool CanSaveDraft
+        {
+            get => _canSaveDraft && !_session.IsPosted;
+            private set
+            {
+                if (_canSaveDraft != value)
+                {
+                    _canSaveDraft = value;
+                    OnPropertyChanged(nameof(CanSaveDraft));
+                }
+            }
+        }
+
+        public bool CanPostOrder
+        {
+            get => _canPostOrder && !_session.IsPosted && _session.PersistedOrderId.HasValue;
+            private set
+            {
+                if (_canPostOrder != value)
+                {
+                    _canPostOrder = value;
+                    OnPropertyChanged(nameof(CanPostOrder));
+                }
+            }
+        }
+
+        public bool IsPosted => _session.IsPosted;
+
+        // PHASE 3: Validation Properties
+        public NewSaleValidationResult ValidationResult
+        {
+            get => _validationResult;
+            private set
+            {
+                if (_validationResult != value)
+                {
+                    _validationResult = value;
+                    OnPropertyChanged(nameof(ValidationResult));
+                    OnPropertyChanged(nameof(HasErrors));
+                    OnPropertyChanged(nameof(ErrorMessage));
+                }
+            }
+        }
+
+        public bool HasErrors => !ValidationResult.IsValid;
+        public string ErrorMessage => HasErrors ? string.Join("\n", ValidationResult.Errors.Select(e => e.Message)) : string.Empty;
+
+        // PHASE 5: Posting Methods
+        public async Task<PostingResult> PostOrderAsync()
+        {
+            if (!ValidationResult.IsValid || !_session.PersistedOrderId.HasValue || _postingService == null)
+            {
+                return new PostingResult 
+                { 
+                    Success = false, 
+                    ErrorMessage = "Order must be saved and valid before posting" 
+                };
+            }
+
+            try
+            {
+                var result = await _postingService.PostOrderAsync(_session.PersistedOrderId.Value);
+                
+                if (result.Success)
+                {
+                    _session.IsPosted = true;
+                    _logger?.LogInformation("Order {OrderId} posted successfully with invoice {InvoiceId}", 
+                        _session.PersistedOrderId, result.InvoiceId);
+                }
+                else
+                {
+                    _logger?.LogWarning("Failed to post order {OrderId}: {Error}", 
+                        _session.PersistedOrderId, result.ErrorMessage);
+                }
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error posting order {OrderId}", _session.PersistedOrderId);
+                return new PostingResult 
+                { 
+                    Success = false, 
+                    ErrorMessage = "An error occurred while posting the order" 
+                };
+            }
+        }
+        public async Task<bool> SaveDraftAsync()
+        {
+            if (!ValidationResult.IsValid || _draftService == null)
+                return false;
+
+            try
+            {
+                var draftLines = Lines.Select(l => new SalesOrderLineDraft
+                {
+                    Description = l.Description,
+                    Quantity = l.Quantity,
+                    UnitPrice = l.UnitPrice
+                }).ToList();
+
+                SalesOrder? savedOrder;
+
+                if (_session.PersistedOrderId.HasValue)
+                {
+                    // Update existing draft
+                    savedOrder = await _draftService.UpdateDraftAsync(_session.PersistedOrderId.Value, CustomerName, OrderDate, draftLines);
+                }
+                else
+                {
+                    // Create new draft
+                    savedOrder = await _draftService.CreateDraftAsync(CustomerName, OrderDate, draftLines);
+                    if (savedOrder != null)
+                    {
+                        _session.PersistedOrderId = savedOrder.Id;
+                    }
+                }
+
+                _logger?.LogInformation("Draft saved successfully: {OrderId}", _session.PersistedOrderId);
+                return savedOrder != null;
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Failed to save draft");
+                return false;
+            }
+        }
+
+        public async Task<bool> LoadDraftAsync(int id)
+        {
+            if (_draftService == null)
+                return false;
+
+            try
+            {
+                var draft = await _draftService.LoadDraftAsync(id);
+                if (draft == null)
+                    return false;
+
+                // Update UI with loaded data
+                CustomerName = $"Customer {draft.CustomerId}"; // Simplified - would need customer lookup
+                OrderDate = draft.OrderDate;
+                Currency = "USD"; // Default
+
+                // Clear existing lines and load from draft
+                Lines.Clear();
+                foreach (var line in draft.Lines)
+                {
+                    Lines.Add(new SalesOrderLineDraftViewModel
+                    {
+                        Description = $"Product {line.ProductId}", // Simplified - would need product lookup
+                        Quantity = line.Quantity,
+                        UnitPrice = line.UnitPrice
+                    });
+                }
+
+                _session.PersistedOrderId = draft.Id;
+                _logger?.LogInformation("Draft loaded successfully: {OrderId}", id);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Failed to load draft {Id}", id);
+                return false;
+            }
+        }
+
+        // PHASE 3: Validation Methods
+        public void ValidateOrder()
+        {
+            var errors = new List<NewSaleValidationError>();
+
+            // Header Validation
+            if (string.IsNullOrWhiteSpace(CustomerName))
+            {
+                errors.Add(new NewSaleValidationError
+                {
+                    Code = "CUSTOMER_REQUIRED",
+                    Message = "Customer is required",
+                    Field = "CustomerName"
+                });
+            }
+
+            if (string.IsNullOrWhiteSpace(Currency))
+            {
+                errors.Add(new NewSaleValidationError
+                {
+                    Code = "CURRENCY_REQUIRED",
+                    Message = "Currency is required",
+                    Field = "Currency"
+                });
+            }
+
+            // Lines Validation
+            if (!Lines.Any())
+            {
+                errors.Add(new NewSaleValidationError
+                {
+                    Code = "AT_LEAST_ONE_LINE",
+                    Message = "At least one line is required",
+                    Field = "Lines"
+                });
+            }
+            else
+            {
+                for (int i = 0; i < Lines.Count; i++)
+                {
+                    var line = Lines[i];
+                    var linePrefix = $"Line {i + 1}";
+
+                    if (string.IsNullOrWhiteSpace(line.Description))
+                    {
+                        errors.Add(new NewSaleValidationError
+                        {
+                            Code = "DESCRIPTION_REQUIRED",
+                            Message = $"{linePrefix}: Description is required",
+                            Field = $"Lines[{i}].Description"
+                        });
+                    }
+
+                    if (line.Quantity <= 0)
+                    {
+                        errors.Add(new NewSaleValidationError
+                        {
+                            Code = "QUANTITY_GT_ZERO",
+                            Message = $"{linePrefix}: Quantity must be greater than 0",
+                            Field = $"Lines[{i}].Quantity"
+                        });
+                    }
+
+                    if (line.UnitPrice < 0)
+                    {
+                        errors.Add(new NewSaleValidationError
+                        {
+                            Code = "UNIT_PRICE_GE_ZERO",
+                            Message = $"{linePrefix}: Unit price must be 0 or greater",
+                            Field = $"Lines[{i}].UnitPrice"
+                        });
+                    }
+                }
+            }
+
+            ValidationResult = new NewSaleValidationResult { Errors = errors };
+        }
+
+        // PHASE 2: Local Interaction Methods (unchanged)
+        public void AddLine()
+        {
+            var newLine = new SalesOrderLineDraftViewModel
+            {
+                Description = $"Item {Lines.Count + 1}",
+                Quantity = 1,
+                UnitPrice = 0
+            };
+            Lines.Add(newLine);
+        }
+
+        public void RemoveLine(SalesOrderLineDraftViewModel line)
+        {
+            if (line != null && Lines.Contains(line))
+            {
+                Lines.Remove(line);
+            }
+        }
+
+        private void UpdateTotalsAndButtonState()
+        {
+            // Auto-calc totals (handled by domain model)
+            OnPropertyChanged(nameof(Subtotal));
+            OnPropertyChanged(nameof(Tax));
+            OnPropertyChanged(nameof(GrandTotal));
+
+            // Button logic: Save Draft enabled if order is valid
+            CanSaveDraft = ValidationResult.IsValid;
+        }
+
+        public void Dispose()
+        {
+            Lines.CollectionChanged -= _linesCollectionChangedHandler;
+        }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        protected virtual void OnPropertyChanged(string propertyName)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
     }
 }

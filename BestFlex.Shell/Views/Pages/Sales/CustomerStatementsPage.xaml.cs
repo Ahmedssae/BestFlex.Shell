@@ -165,7 +165,7 @@ namespace BestFlex.Shell.Pages
             };
             doc.Blocks.Add(title);
 
-            var custName = (cmbCustomer.SelectedItem as dynamic)?.Name ?? "(customer)";
+            var custName = (cmbCustomer.SelectedItem as CustomerStatementsViewModel.CustomerItem)?.Name ?? "(customer)";
             var range = $"{(dpFrom.SelectedDate.HasValue ? dpFrom.SelectedDate.Value.ToString("yyyy-MM-dd") : "…")} → {(dpTo.SelectedDate.HasValue ? dpTo.SelectedDate.Value.ToString("yyyy-MM-dd") : "…")}";
             doc.Blocks.Add(new Paragraph(new Run($"Customer: {custName}   •   Range: {range}"))
             { Foreground = Brushes.Gray, Margin = new Thickness(0, 0, 0, 12) });

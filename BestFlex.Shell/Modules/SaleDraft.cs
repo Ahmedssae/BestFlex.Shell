@@ -40,21 +40,21 @@ namespace BestFlex.Shell.Models
     public sealed class SaleDraftLine : INotifyPropertyChanged
     {
         private int? _productId;
-        public int? ProductId { get => _productId; set { _productId = value; OnPropertyChanged(); OnPropertyChanged(nameof(HasProduct)); } }
+        public int? ProductId { get => _productId; set { if (_productId == value) return; _productId = value; OnPropertyChanged(); OnPropertyChanged(nameof(HasProduct)); } }
 
         public bool HasProduct => _productId.HasValue && _productId.Value > 0;
 
         private string _code = "";
-        public string Code { get => _code; set { _code = value ?? ""; OnPropertyChanged(); } }
+        public string Code { get => _code; set { if (_code == value) return; _code = value ?? ""; OnPropertyChanged(); } }
 
         private string _name = "";
-        public string Name { get => _name; set { _name = value ?? ""; OnPropertyChanged(); } }
+        public string Name { get => _name; set { if (_name == value) return; _name = value ?? ""; OnPropertyChanged(); } }
 
         private decimal _qty;
-        public decimal Qty { get => _qty; set { _qty = value; OnPropertyChanged(); OnPropertyChanged(nameof(Total)); } }
+        public decimal Qty { get => _qty; set { if (_qty == value) return; _qty = value; OnPropertyChanged(); OnPropertyChanged(nameof(Total)); } }
 
         private decimal _price;
-        public decimal Price { get => _price; set { _price = value; OnPropertyChanged(); OnPropertyChanged(nameof(Total)); } }
+        public decimal Price { get => _price; set { if (_price == value) return; _price = value; OnPropertyChanged(); OnPropertyChanged(nameof(Total)); } }
 
         // per-line percentage discount (0..100)
         private decimal _discountPct;

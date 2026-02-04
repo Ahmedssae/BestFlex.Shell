@@ -13,7 +13,7 @@ namespace BestFlex.Application.Contracts.Sales
         public List<NewSaleItemDto> Items { get; set; } = new();
 
         // Implicit conversion to the Abstractions version
-        public static implicit operator BestFlex.Application.Abstractions.Contracts.Sales.NewSaleDto(NewSaleDto dto)
+        public static implicit operator BestFlex.Application.Abstractions.Contracts.Sales.NewSaleDto?(NewSaleDto? dto)
         {
             if (dto == null) return null;
             return new BestFlex.Application.Abstractions.Contracts.Sales.NewSaleDto
@@ -22,7 +22,7 @@ namespace BestFlex.Application.Contracts.Sales
                 InvoiceDate = dto.InvoiceDate,
                 Currency = dto.Currency,
                 Notes = dto.Notes,
-                Items = dto.Items.Select(item => (BestFlex.Application.Abstractions.Contracts.Sales.NewSaleItemDto)item).ToList()
+                Items = dto.Items.Where(item => item != null).Select(item => (BestFlex.Application.Abstractions.Contracts.Sales.NewSaleItemDto)item!).ToList()
             };
         }
     }
@@ -34,7 +34,7 @@ namespace BestFlex.Application.Contracts.Sales
         public decimal UnitPrice { get; set; }         // final price used
 
         // Implicit conversion to the Abstractions version
-        public static implicit operator BestFlex.Application.Abstractions.Contracts.Sales.NewSaleItemDto(NewSaleItemDto item)
+        public static implicit operator BestFlex.Application.Abstractions.Contracts.Sales.NewSaleItemDto?(NewSaleItemDto? item)
         {
             if (item == null) return null;
             return new BestFlex.Application.Abstractions.Contracts.Sales.NewSaleItemDto

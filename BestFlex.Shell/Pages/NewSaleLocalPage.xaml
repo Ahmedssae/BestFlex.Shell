@@ -1,0 +1,218 @@
+<UserControl x:Class="BestFlex.Shell.Pages.NewSaleLocalPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:BestFlex.Shell.Converters"
+             mc:Ignorable="d" 
+             d:DesignHeight="600" d:DesignWidth="800">
+    
+    <UserControl.Resources>
+        <local:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+        <local:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
+        <local:InventoryStatusConverter x:Key="InventoryStatusConverter"/>
+    </UserControl.Resources>
+    
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,30">
+            <TextBlock Text="Sales Order" FontSize="28" FontWeight="SemiBold" Foreground="#2C3E50"/>
+            <TextBlock Text="Create and manage customer sales orders" FontSize="14" Foreground="#7F8C8D" Margin="0,5,0,0"/>
+        </StackPanel>
+
+        <!-- Validation Messages -->
+        <Border Grid.Row="0" Background="#FEF2F2" BorderBrush="#FCA5A5" BorderThickness="1" CornerRadius="4"
+                Padding="16" Margin="0,90,0,10" Visibility="{Binding HasValidationErrors, Converter={StaticResource BoolToVisibilityConverter}}">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="!" FontSize="14" FontWeight="Bold" Foreground="#DC2626" 
+                           Background="#FCA5A5" Width="20" Height="20" TextAlignment="Center" 
+                           VerticalAlignment="Center" Margin="0,0,12,0"/>
+                <TextBlock Text="{Binding ValidationMessage}" Foreground="#991B1B" FontSize="14" VerticalAlignment="Center"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Success Messages -->
+        <Border Grid.Row="0" Background="#F0FDF4" BorderBrush="#86EFAC" BorderThickness="1" CornerRadius="4"
+                Padding="16" Margin="0,90,0,10" Visibility="{Binding HasSuccessMessage, Converter={StaticResource BoolToVisibilityConverter}}">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="✓" FontSize="14" FontWeight="Bold" Foreground="#166534" 
+                           Background="#86EFAC" Width="20" Height="20" TextAlignment="Center" 
+                           VerticalAlignment="Center" Margin="0,0,12,0"/>
+                <TextBlock Text="{Binding SuccessMessage}" Foreground="#166534" FontSize="14" VerticalAlignment="Center"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Customer Info -->
+        <Border Grid.Row="0" Background="#FFFFFF" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="6" Padding="20" Margin="0,120,0,20">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="120"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Customer Name" FontSize="14" FontWeight="Medium" 
+                           Foreground="#374151" VerticalAlignment="Center" Margin="0,0,0,8"/>
+                <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Vertical">
+                    <TextBox Text="{Binding Draft.CustomerName, UpdateSourceTrigger=PropertyChanged}" 
+                             Height="40" Padding="12,8" FontSize="14" BorderBrush="#D1D5DB" BorderThickness="1"
+                             Background="#FAFAFA"/>
+                    <TextBlock Text="{Binding CustomerFieldError}" FontSize="12" Foreground="#DC2626" 
+                               Margin="2,4,0,0" Visibility="{Binding CustomerFieldError, Converter={StaticResource StringToVisibilityConverter}}"/>
+                </StackPanel>
+                
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Order Date" FontSize="14" FontWeight="Medium" 
+                           Foreground="#374151" VerticalAlignment="Center" Margin="0,16,0,8"/>
+                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Draft.OrderDate, StringFormat='yyyy-MM-dd', Mode=OneWay}" 
+                         Height="40" Padding="12,8" FontSize="14" BorderBrush="#D1D5DB" BorderThickness="1"
+                         Background="#FAFAFA" IsReadOnly="True"/>
+            </Grid>
+        </Border>
+
+        <!-- Lines Section -->
+        <Border Grid.Row="1" Background="#FFFFFF" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="6" Padding="20">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                
+                <!-- Section Header -->
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,16">
+                    <TextBlock Text="Order Items" FontSize="16" FontWeight="SemiBold" Foreground="#1F2937"/>
+                    <TextBlock Text="{Binding Lines.Count, StringFormat=' ({0} items)'}" FontSize="14" Foreground="#6B7280" 
+                               VerticalAlignment="Center" Margin="8,0,0,0"/>
+                </StackPanel>
+                
+                <!-- Lines Error Message -->
+                <TextBlock Text="{Binding LinesFieldError}" FontSize="12" Foreground="#DC2626" 
+                           Margin="0,0,0,12" Visibility="{Binding LinesFieldError, Converter={StaticResource StringToVisibilityConverter}}"/>
+                
+                <!-- DataGrid -->
+                <DataGrid Grid.Row="1" ItemsSource="{Binding Lines}" AutoGenerateColumns="False" 
+                          CanUserAddRows="False" CanUserDeleteRows="False" GridLinesVisibility="Horizontal"
+                          HeadersVisibility="Column" Background="#FAFAFA" BorderBrush="#E5E7EB" BorderThickness="1"
+                          RowBackground="#FFFFFF" AlternatingRowBackground="#F9FAFB" FontSize="14">
+                    <DataGrid.ColumnHeaderStyle>
+                        <Style TargetType="DataGridColumnHeader">
+                            <Setter Property="Background" Value="#F3F4F6"/>
+                            <Setter Property="Foreground" Value="#374151"/>
+                            <Setter Property="FontWeight" Value="Medium"/>
+                            <Setter Property="Height" Value="44"/>
+                            <Setter Property="Padding" Value="12,8"/>
+                            <Setter Property="BorderBrush" Value="#E5E7EB"/>
+                            <Setter Property="BorderThickness" Value="0,0,1,0"/>
+                        </Style>
+                    </DataGrid.ColumnHeaderStyle>
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Description" Binding="{Binding DisplayName, UpdateSourceTrigger=PropertyChanged}" 
+                                            Width="300"/>
+                        <DataGridTextColumn Header="Quantity" Binding="{Binding DisplayQuantity, UpdateSourceTrigger=PropertyChanged}" 
+                                            Width="120"/>
+                        <DataGridTextColumn Header="Unit Price" Binding="{Binding DisplayPrice, UpdateSourceTrigger=PropertyChanged}" 
+                                            Width="120"/>
+                        <DataGridTextColumn Header="Line Total" Binding="{Binding LineTotal, StringFormat='C'}" 
+                                            Width="140" IsReadOnly="True"/>
+                        <DataGridTextColumn Header="Inventory" Binding="{Binding InventoryDisplay}" 
+                                            Width="150" IsReadOnly="True">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="{Binding InventoryStatus, Converter={StaticResource InventoryStatusConverter}}"/>
+                                    <Setter Property="FontWeight" Value="Medium"/>
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
+                        <DataGridTemplateColumn Header="Actions" Width="100">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Button Content="Remove" Command="{Binding DataContext.RemoveLineCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="{Binding}" Width="70" Height="32" FontSize="12"
+                                            Background="#EF4444" Foreground="White" BorderThickness="0"
+                                            Padding="8,4"/>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+                
+                <!-- Add Line Button -->
+                <Button Grid.Row="2" Content="+ Add Line" Command="{Binding AddLineCommand}" 
+                        Height="40" Margin="0,16,0,0" FontSize="14" FontWeight="Medium"
+                        Background="#3B82F6" Foreground="White" BorderThickness="0" Padding="16,8"/>
+            </Grid>
+        </Border>
+
+        <!-- Totals and Actions -->
+        <Border Grid.Row="2" Background="#FFFFFF" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="6" Padding="24" Margin="0,20,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <!-- Totals Section -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" HorizontalAlignment="Left">
+                    <Border BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="4" Padding="16,12" Margin="0,0,16,0">
+                        <StackPanel Orientation="Vertical">
+                            <TextBlock Text="Subtotal" FontSize="12" FontWeight="Medium" Foreground="#6B7280"/>
+                            <TextBlock Text="{Binding Draft.Subtotal, StringFormat='C'}" FontSize="18" FontWeight="SemiBold" Foreground="#1F2937"/>
+                        </StackPanel>
+                    </Border>
+                    
+                    <Border BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="4" Padding="16,12" Margin="0,0,16,0">
+                        <StackPanel Orientation="Vertical">
+                            <TextBlock Text="Tax" FontSize="12" FontWeight="Medium" Foreground="#6B7280"/>
+                            <TextBlock Text="{Binding Draft.Tax, StringFormat='C'}" FontSize="18" FontWeight="SemiBold" Foreground="#1F2937"/>
+                        </StackPanel>
+                    </Border>
+                    
+                    <Border Background="#F0FDF4" BorderBrush="#86EFAC" BorderThickness="1" CornerRadius="4" Padding="20,12">
+                        <StackPanel Orientation="Vertical">
+                            <TextBlock Text="Total" FontSize="12" FontWeight="Medium" Foreground="#166534"/>
+                            <TextBlock Text="{Binding Draft.GrandTotal, StringFormat='C'}" FontSize="20" FontWeight="Bold" Foreground="#166534"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- Action Buttons -->
+                <StackPanel Grid.Column="1" Orientation="Vertical" HorizontalAlignment="Right">
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                        <Button Content="Save Draft" Command="{Binding SaveDraftCommand}" 
+                                Height="44" Padding="24,0" Margin="0,0,12,0" FontSize="14" FontWeight="Medium"
+                                Background="#6B7280" Foreground="White" BorderThickness="0"/>
+                        <Button Content="Post Invoice" Command="{Binding PostInvoiceCommand}" 
+                                Height="44" Padding="24,0" FontSize="14" FontWeight="Medium"
+                                Background="#059669" Foreground="White" BorderThickness="0"/>
+                    </StackPanel>
+                    
+                    <!-- Status Messages -->
+                    <TextBlock Text="{Binding SaveDraftExplanation}" 
+                               FontSize="12" Foreground="#6B7280" TextWrapping="Wrap" MaxWidth="400"
+                               Visibility="{Binding SaveDraftExplanation, Converter={StaticResource StringToVisibilityConverter}}"/>
+                    
+                    <!-- Posted State -->
+                    <Border Background="#EFF6FF" BorderBrush="#BFDBFE" BorderThickness="1" CornerRadius="4" Padding="12,8" Margin="0,8,0,0"
+                            Visibility="{Binding IsPosted, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="✓" FontSize="12" FontWeight="Bold" Foreground="#1E40AF" 
+                                       Background="#BFDBFE" Width="18" Height="18" TextAlignment="Center" 
+                                       VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBlock Text="Order has been posted and is now read-only" 
+                                       FontSize="12" Foreground="#1E40AF" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

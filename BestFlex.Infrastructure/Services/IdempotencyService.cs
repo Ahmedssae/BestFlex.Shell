@@ -30,19 +30,19 @@ namespace BestFlex.Infrastructure.Services
             _cache = cache ?? throw new ArgumentNullException(nameof(cache));
         }
 
-        public async Task<bool> HasBeenExecutedAsync(string operationId)
+        public Task<bool> HasBeenExecutedAsync(string operationId)
         {
             if (string.IsNullOrWhiteSpace(operationId))
-                return false;
+                return Task.FromResult(false);
 
             // Check both memory cache and dictionary
             if (_cache.TryGetValue(operationId, out var record))
-                return record != null;
+                return Task.FromResult(record != null);
 
-            return _executedOperations.ContainsKey(operationId);
+            return Task.FromResult(_executedOperations.ContainsKey(operationId));
         }
 
-        public async Task MarkAsExecutedAsync(string operationId, object? result = null)
+        public Task MarkAsExecutedAsync(string operationId, object? result = null)
         {
             if (string.IsNullOrWhiteSpace(operationId))
                 throw new ArgumentException("Operation ID cannot be null or empty", nameof(operationId));
@@ -59,25 +59,25 @@ namespace BestFlex.Infrastructure.Services
 
             _logger.LogDebug("Marked operation {OperationId} as executed at {ExecutedAt}", operationId, record.ExecutedAt);
 
-            await Task.CompletedTask;
+            return Task.CompletedTask;
         }
 
-        public async Task<object?> GetExecutedResultAsync(string operationId)
+        public Task<object?> GetExecutedResultAsync(string operationId)
         {
             if (string.IsNullOrWhiteSpace(operationId))
-                return null;
+                return Task.FromResult<object?>(null);
 
             // Check cache first, then dictionary
             if (_cache.TryGetValue(operationId, out var cacheRecord) && cacheRecord is ExecutionRecord record)
-                return record.Result;
+                return Task.FromResult(record.Result);
 
             if (_executedOperations.TryGetValue(operationId, out var dictRecord) && dictRecord is ExecutionRecord dictExecRecord)
-                return dictExecRecord.Result;
+                return Task.FromResult(dictExecRecord.Result);
 
-            return null;
+            return Task.FromResult<object?>(null);
         }
 
-        public async Task ClearExecutionHistoryAsync(string operationId)
+        public Task ClearExecutionHistoryAsync(string operationId)
         {
             if (string.IsNullOrWhiteSpace(operationId))
                 throw new ArgumentException("Operation ID cannot be null or empty", nameof(operationId));
@@ -87,7 +87,7 @@ namespace BestFlex.Infrastructure.Services
 
             _logger.LogDebug("Cleared execution history for operation {OperationId}", operationId);
 
-            await Task.CompletedTask;
+            return Task.CompletedTask;
         }
 
         public void Dispose()

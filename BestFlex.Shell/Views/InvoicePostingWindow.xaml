@@ -1,0 +1,157 @@
+<Window x:Class="BestFlex.Shell.Views.InvoicePostingWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="Invoice Posting" Height="700" Width="900"
+        WindowStartupLocation="CenterScreen">
+    
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <TextBlock Grid.Row="0" Text="Invoice Posting" FontSize="24" FontWeight="Bold" Margin="0,0,0,20"/>
+
+        <!-- Order Selection and Invoice Info -->
+        <Grid Grid.Row="1" Margin="0,0,0,20">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <Label Grid.Row="0" Grid.Column="0" Content="Sales Order:" VerticalAlignment="Center"/>
+            <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{Binding AvailableOrders}" 
+                      SelectedValue="{Binding SelectedOrderId}" 
+                      DisplayMemberPath="OrderNumber" SelectedValuePath="Id"
+                      Height="30" VerticalContentAlignment="Center" Margin="0,0,10,0"/>
+
+            <Label Grid.Row="1" Grid.Column="0" Content="Customer Name:" VerticalAlignment="Center" Margin="0,10,0,0"/>
+            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding CustomerName}" 
+                       VerticalAlignment="Center" Margin="0,10,0,10" Height="30" Background="#F5F5F5" Padding="5"/>
+
+            <Label Grid.Row="2" Grid.Column="0" Content="Invoice Number:" VerticalAlignment="Center" Margin="0,10,0,0"/>
+            <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Margin="0,10,0,10">
+                <TextBox Text="{Binding InvoiceNumber, UpdateSourceTrigger=PropertyChanged}" 
+                         Height="30" Width="200" VerticalContentAlignment="Center" IsReadOnly="{Binding IsLocked}"/>
+                <Button Content="Generate" Command="{Binding GenerateInvoiceCommand}" 
+                        Width="80" Height="30" Margin="10,0,0,0"/>
+            </StackPanel>
+
+            <Label Grid.Row="3" Grid.Column="0" Content="Invoice Date:" VerticalAlignment="Center" Margin="0,10,0,0"/>
+            <DatePicker Grid.Row="3" Grid.Column="1" SelectedDate="{Binding InvoiceDate}" 
+                        Height="30" VerticalContentAlignment="Center" Margin="0,10,0,10" IsEnabled="{Binding IsLocked, Converter={StaticResource BoolToInverseBoolConverter}}"/>
+
+            <Label Grid.Row="4" Grid.Column="0" Content="Due Date:" VerticalAlignment="Center" Margin="0,10,0,0"/>
+            <DatePicker Grid.Row="4" Grid.Column="1" SelectedDate="{Binding DueDate}" 
+                        Height="30" VerticalContentAlignment="Center" Margin="0,10,0,10" IsEnabled="{Binding IsLocked, Converter={StaticResource BoolToInverseBoolConverter}}"/>
+        </Grid>
+
+        <!-- Invoice Lines -->
+        <Grid Grid.Row="2">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0" Text="Invoice Lines" FontWeight="Bold" Margin="0,0,0,10"/>
+
+            <DataGrid Grid.Row="1" ItemsSource="{Binding InvoiceLines}" 
+                      AutoGenerateColumns="False" 
+                      CanUserAddRows="False" 
+                      CanUserDeleteRows="False"
+                      IsReadOnly="True"
+                      GridLinesVisibility="Horizontal"
+                      HeadersVisibility="Column">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="300"/>
+                    <DataGridTextColumn Header="Quantity" Binding="{Binding Quantity}" Width="100"/>
+                    <DataGridTextColumn Header="Unit Price" Binding="{Binding UnitPrice, StringFormat=C}" Width="120"/>
+                    <DataGridTextColumn Header="Line Total" Binding="{Binding LineTotal, StringFormat=C}" Width="120"/>
+                </DataGrid.Columns>
+            </DataGrid>
+        </Grid>
+
+        <!-- Invoice Summary -->
+        <Border Grid.Row="3" Background="#F8F9FA" BorderBrush="#DEE2E6" BorderThickness="1" CornerRadius="5" Padding="15" Margin="0,20,0,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Subtotal:" VerticalAlignment="Center"/>
+                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Subtotal, StringFormat=C}" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="20,0,0,0"/>
+
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Tax:" VerticalAlignment="Center" Margin="0,5,0,0"/>
+                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding TaxAmount, StringFormat=C}" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="20,0,0,0"/>
+
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Discount:" VerticalAlignment="Center" Margin="0,5,0,0"/>
+                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding DiscountAmount, StringFormat=C}" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="20,0,0,0"/>
+
+                <Separator Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,10,0,10"/>
+
+                <TextBlock Grid.Row="4" Grid.Column="0" Text="Total:" FontWeight="Bold" VerticalAlignment="Center" Margin="0,5,0,0"/>
+                <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding TotalAmount, StringFormat=C}" FontWeight="Bold" FontSize="16" 
+                           VerticalAlignment="Center" HorizontalAlignment="Right" Margin="20,0,0,0"/>
+            </Grid>
+        </Border>
+
+        <!-- Status and Validation -->
+        <StackPanel Grid.Row="4">
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                <TextBlock Text="Status:" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <TextBlock Text="{Binding IsLocked, Converter={StaticResource BoolToLockedStatusConverter}}" 
+                           VerticalAlignment="Center" FontWeight="Bold" Foreground="{Binding IsLocked, Converter={StaticResource BoolToStatusColorConverter}}"/>
+            </StackPanel>
+
+            <!-- Validation Errors -->
+            <ItemsControl ItemsSource="{Binding ValidationErrors}" Margin="0,0,0,10">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding ErrorMessage}" Foreground="Red" FontSize="12" Margin="0,2,0,0"/>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- Status Message -->
+            <TextBlock Text="{Binding ErrorMessage}" Foreground="Red" 
+                       Margin="0,10,0,0" VerticalAlignment="Center" TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <!-- Buttons -->
+        <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+            <Button Content="Refresh" Command="{Binding RefreshCommand}" Width="80" Height="35" Margin="0,0,10,0"/>
+            <Button Content="Post Invoice" Command="{Binding PostInvoiceCommand}" Width="100" Height="35" 
+                    Background="Green" Foreground="White" IsEnabled="{Binding IsLocked, Converter={StaticResource BoolToInverseBoolConverter}}"/>
+        </StackPanel>
+
+        <!-- Loading Overlay -->
+        <Grid Grid.RowSpan="5" Background="#80000000" Visibility="{Binding IsLoading, Converter={StaticResource BoolToVisibilityConverter}}">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                <ProgressBar IsIndeterminate="True" Height="20" Width="200" Margin="0,0,0,10"/>
+                <TextBlock Text="Processing..." Foreground="White" HorizontalAlignment="Center"/>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>

@@ -24,7 +24,7 @@ namespace BestFlex.Shell
         }
 
         private async void Search_Click(object sender, RoutedEventArgs e)
-            => await _vm.SearchAsync(resetToFirstPage: true);
+            => await _vm.SearchAsync("");
         private void Go_Click(object sender, RoutedEventArgs e)
         {
             // Handled by command binding in XAML; keep method for legacy hookup if needed.
@@ -40,7 +40,7 @@ namespace BestFlex.Shell
 
         private void OpenSelected()
         {
-            var row = GridInvoices?.SelectedItem as InvoiceListViewModel.InvoiceRow
+            var row = GridInvoices?.SelectedItem as BestFlex.Shell.ViewModels.InvoiceRow
                       ?? _vm.Items.FirstOrDefault();
 
             if (row == null)
@@ -60,6 +60,11 @@ namespace BestFlex.Shell
             // Use navigation service to open detail window
             var nav = ((App)System.Windows.Application.Current).Services.GetService<BestFlex.Application.Abstractions.INavigationService>();
             if (nav != null) nav.OpenInvoiceDetails(row.Id);
+            else
+            {
+                MessageBox.Show("Invalid invoice Id format.", "Invoices",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
         }
 
         private void Close_Click(object sender, RoutedEventArgs e) => Close();

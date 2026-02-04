@@ -53,7 +53,7 @@ namespace BestFlex.Infrastructure.Services
             }
         }
 
-        public async Task ReleaseLockAsync(string operationId)
+        public Task ReleaseLockAsync(string operationId)
         {
             if (string.IsNullOrWhiteSpace(operationId))
                 throw new ArgumentException("Operation ID cannot be null or empty", nameof(operationId));
@@ -75,20 +75,20 @@ namespace BestFlex.Infrastructure.Services
                 _logger.LogWarning("Attempted to release non-existent lock for operation {OperationId}", operationId);
             }
             
-            await Task.CompletedTask;
+            return Task.CompletedTask;
         }
 
-        public async Task<bool> IsLockedAsync(string operationId)
+        public Task<bool> IsLockedAsync(string operationId)
         {
             if (string.IsNullOrWhiteSpace(operationId))
-                return false;
+                return Task.FromResult(false);
 
             if (_locks.TryGetValue(operationId, out var semaphore))
             {
-                return semaphore.CurrentCount == 0;
+                return Task.FromResult(semaphore.CurrentCount == 0);
             }
             
-            return false;
+            return Task.FromResult(false);
         }
 
         public void Dispose()

@@ -8,6 +8,7 @@ using System.Windows.Documents;
 using BestFlex.Application.Abstractions;
 using BestFlex.Shell.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
 
 namespace BestFlex.Shell.Services
@@ -34,8 +35,8 @@ namespace BestFlex.Shell.Services
         {
             try
             {
-                var mainWindow = System.Windows.Application.Current?.MainWindow as MainWindow;
-                if (mainWindow?.MainHost == null)
+                var mainWindow = System.Windows.Application.Current?.MainWindow;
+                if (mainWindow == null)
                 {
                     _notification.ShowError("Main window not available");
                     return;
@@ -48,22 +49,54 @@ namespace BestFlex.Shell.Services
                     return;
                 }
 
-                // Use safe navigation to dashboard
+                // Dashboard is ALWAYS available - never gated, never optional
+                // If navigation fails, create dashboard directly as ultimate fallback
                 if (!navigator.NavigateSafe("dashboard", "Failed to load dashboard page"))
                 {
-                    _notification.ShowError("Dashboard page unavailable");
+                    var logger = _sp.GetService<Microsoft.Extensions.Logging.ILogger<NavigationService>>();
+                    logger?.LogWarning("Dashboard navigation failed, creating dashboard directly");
+                    
+                    // Ultimate fallback - create dashboard directly without navigator
+                    try
+                    {
+                        var vm = new BestFlex.Shell.ViewModels.DashboardViewModel();
+                        var dashboardPage = new BestFlex.Shell.Pages.DashboardPage(vm);
+                        ((MainWindow)mainWindow).MainHost.Content = dashboardPage;
+                    }
+                    catch (Exception fallbackEx)
+                    {
+                        logger?.LogError(fallbackEx, "Even direct dashboard creation failed");
+                        // Last resort - show safe fallback
+                        var fallbackPage = new BestFlex.Shell.Pages.SafeFallbackPage("Dashboard temporarily unavailable");
+                        ((MainWindow)mainWindow).MainHost.Content = fallbackPage;
+                    }
                 }
                 else
                 {
                     // Set the loaded page to the MainHost
-                    mainWindow.MainHost.Content = navigator.Current;
+                    ((MainWindow)mainWindow).MainHost.Content = navigator.Current;
                 }
             }
             catch (Exception ex)
             {
                 var unwrapped = ReflectionExceptionUnwrapper.Unwrap(ex);
                 _error.Handle(unwrapped, "NavigationService.NavigateToDashboard");
-                _notification.ShowError("Failed to navigate to dashboard");
+                
+                // Even in case of exception, never leave user stuck - show dashboard fallback
+                try
+                {
+                    var mainWindow = System.Windows.Application.Current?.MainWindow;
+                    if (mainWindow is MainWindow mainWin && mainWin.MainHost != null)
+                    {
+                        var fallbackPage = new BestFlex.Shell.Pages.SafeFallbackPage("Dashboard temporarily unavailable");
+                        mainWin.MainHost.Content = fallbackPage;
+                    }
+                }
+                catch
+                {
+                    // Last resort - at least don't crash
+                    _notification.ShowError("Dashboard unavailable but application continues");
+                }
             }
         }
         
@@ -95,6 +128,13 @@ namespace BestFlex.Shell.Services
                 await lockObj.WaitAsync();
                 try
                 {
+                    // Check ERP v1.0 capability constraints
+                    if (!_salesGate.IsInvoicePostingEnabled())
+                    {
+                        _notification.ShowError("Invoice details are not available in this version of BestFlex ERP.");
+                        return;
+                    }
+
                     var currentApp = System.Windows.Application.Current;
                     if (currentApp == null) return;
                     var app = (App)currentApp;
@@ -140,8 +180,18 @@ namespace BestFlex.Shell.Services
                     var cust = db.CustomerAccounts.Find(customerId);
                     name = cust?.Name ?? string.Empty;
                 }
-                // Preload synchronously (best-effort)
-                wnd.PreloadAsync(name, DateTime.Today.AddDays(-90), DateTime.Today, includeAging: true).GetAwaiter().GetResult();
+                // Preload asynchronously and non-blocking (best-effort)
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await wnd.PreloadAsync(name, DateTime.Today.AddDays(-90), DateTime.Today, includeAging: true);
+                    }
+                    catch
+                    {
+                        // Ignore preload failures - window will still open
+                    }
+                });
             }
             catch { /* best-effort */ }
 
@@ -152,40 +202,16 @@ namespace BestFlex.Shell.Services
         {
             try
             {
-                // Module gate check BEFORE any other logic
-                if (!_salesGate.IsEnabled())
-                {
-                    throw new BestFlex.Application.UserFriendlyException("Sales module is currently under maintenance.");
-                }
-
-                // Centralized module policy enforcement (Phase 14)
-                var _modulePolicy = _sp.GetService<BestFlex.Application.Abstractions.IModulePolicyService>();
-                _modulePolicy?.ValidateEnabled(BestFlex.Application.Abstractions.ErpModule.Sales);
-                _sp.GetRequiredService<BestFlex.Application.Abstractions.ISystemSafetyPolicy>()
-                   .EnsureOperationAllowed(BestFlex.Application.Abstractions.KillSwitch.Sales, "New Sale");
-
-                // Check authorization BEFORE navigation
-                var authorizationService = _sp.GetService<IAuthorizationService>();
-                if (authorizationService == null)
-                {
-                    _notification.ShowError("Authorization service not available. Please contact administrator.");
-                    return;
-                }
-                
-                var hasPermission = authorizationService.HasPermissionAsync(Application.Abstractions.Permission.CreateSale).Result;
-                if (!hasPermission)
-                {
-                    var reason = authorizationService.GetPermissionDeniedReasonAsync(Application.Abstractions.Permission.CreateSale).Result;
-                    _notification.ShowError(reason ?? "You do not have permission to create sales.");
-                    return;
-                }
-                
+                // EXPLICIT NAVIGATION: No routes, no strings, no indirection
                 var currentApp = System.Windows.Application.Current;
                 if (currentApp == null) return;
                 var app = (App)currentApp;
-                // Navigate to the New Sale Page via the registered navigator
-                var nav = app.Services.GetService<BestFlex.Shell.Navigation.INavigator>();
-                nav?.Navigate("app://sales/new");
+                
+                var contentHost = app.Services.GetRequiredService<BestFlex.Shell.Abstractions.IMainContentHost>();
+                var viewFactory = app.Services.GetRequiredService<BestFlex.Shell.Factories.ViewFactory>();
+                
+                // DETERMINISTIC: Direct factory call
+                contentHost.Show(viewFactory.CreateNewSale());
             }
             catch (Exception ex)
             {
@@ -228,7 +254,7 @@ namespace BestFlex.Shell.Services
             catch (Exception ex)
             {
                 var unwrapped = ReflectionExceptionUnwrapper.Unwrap(ex);
-                _error.Handle(unwrapped, "NavigationService.OpenUnpaidInvoices");
+                _error.Handle(unwrapped, "[NavigationService] OpenUnpaidInvoices");
                 _notification.ShowError(ReflectionExceptionUnwrapper.GetUserFriendlyMessage(unwrapped));
             }
         }

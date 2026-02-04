@@ -46,7 +46,7 @@ namespace BestFlex.Shell
                     Close();
                     return;
                 }
-                await _vm.LoadAsync(InvoiceId);
+                await _vm.LoadAsync();
 
             };
         }
@@ -109,7 +109,7 @@ namespace BestFlex.Shell
                 // makes the business logic testable in the VM.
                 var companySettings = _companyOptions.CurrentValue;
                 var printSettings = _printOptions.CurrentValue;
-                var dto = _vm.PrepareInvoicePrintData(companySettings, printSettings);
+                var dto = await _vm.PrepareInvoicePrintData();
 
                 var bytes = await _pdfExporter.RenderPdfAsync(dto);
                 File.WriteAllBytes(sfd.FileName, bytes);

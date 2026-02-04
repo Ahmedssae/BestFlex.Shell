@@ -15,6 +15,7 @@ namespace BestFlex.Shell.Services
     {
         private readonly IServiceProvider _sp;
         private readonly IFeatureService _featureService;
+        private readonly IPermissionService _permissions;
         private readonly IAuditService _audit;
         private readonly IErrorService _error;
         private readonly IUserNotificationService _notification;
@@ -24,6 +25,7 @@ namespace BestFlex.Shell.Services
         public FeatureAwareNavigationService(
             IServiceProvider sp,
             IFeatureService featureService,
+            IPermissionService permissions,
             IAuditService audit,
             IErrorService error,
             IUserNotificationService notification,
@@ -32,6 +34,7 @@ namespace BestFlex.Shell.Services
         {
             _sp = sp ?? throw new ArgumentNullException(nameof(sp));
             _featureService = featureService ?? throw new ArgumentNullException(nameof(featureService));
+            _permissions = permissions ?? throw new ArgumentNullException(nameof(permissions));
             _audit = audit ?? throw new ArgumentNullException(nameof(audit));
             _error = error ?? throw new ArgumentNullException(nameof(error));
             _notification = notification ?? throw new ArgumentNullException(nameof(notification));
@@ -232,8 +235,12 @@ namespace BestFlex.Shell.Services
                 feature: "Sales",
                 action: () =>
                 {
-                    var navigationService = _sp.GetService<BestFlex.Shell.Abstractions.IShellNavigationService>();
-                    navigationService?.NavigateToDashboard();
+                    // FIXED: Navigate to New Sale, NOT Dashboard!
+                    var navigator = _sp.GetService<BestFlex.Shell.Navigation.INavigator>();
+                    if (navigator != null)
+                    {
+                        navigator.Navigate("sales/new");
+                    }
                 },
                 context: "New Sale"
             );
@@ -281,7 +288,15 @@ namespace BestFlex.Shell.Services
         {
             try
             {
-                _logger.LogInformation("Navigation requested: {Route} (Context: {Context})", route, context ?? route);
+                _logger.LogInformation("[NavigationModule] Navigation requested: {Route} (Context: {Context})", route, context ?? route);
+
+                // Check permissions first
+                if (!HasPermissionForRoute(route))
+                {
+                    _logger.LogWarning("[NavigationModule] Navigation blocked: {Route} - insufficient permissions", route);
+                    _notification.ShowWarning($"You do not have permission to access {context ?? route}");
+                    return;
+                }
 
                 // Check if required features are available
                 var requiredFeatures = GetRequiredFeaturesForRoute(route);
@@ -292,22 +307,43 @@ namespace BestFlex.Shell.Services
                         var reason = _featureService.GetFeatureUnavailableReason(requiredFeature) 
                             ?? $"{requiredFeature} feature not available";
                         
-                        _logger.LogWarning("Navigation blocked: {Route} - {Feature} unavailable: {Reason}", route, requiredFeature, reason);
+                        _logger.LogWarning("[NavigationModule] Navigation blocked: {Route} - {Feature} unavailable: {Reason}", route, requiredFeature, reason);
                         _notification.ShowWarning($"Cannot open {context ?? route}: {reason}");
                         return;
                     }
                 }
 
                 // All features available, proceed with navigation
-                _logger.LogInformation("Navigation allowed: {Route} - all required features available", route);
+                _logger.LogInformation("[NavigationModule] Navigation allowed: {Route} - all required features available", route);
                 action();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Navigation failed: {Route}", route);
+                _logger.LogError(ex, "[NavigationModule] Navigation failed: {Route}", route);
                 _error.Handle(ex, $"Failed to open {context ?? route}");
                 _notification.ShowError($"Failed to open {context ?? route}. Please try again.");
             }
+        }
+
+        private bool HasPermissionForRoute(string route)
+        {
+            return route switch
+            {
+                NavigationRoutes.Dashboard => _permissions.CanViewDashboard(),
+                NavigationRoutes.NewSale => _permissions.CanCreateSale(),
+                NavigationRoutes.Invoices => _permissions.CanViewSales(),
+                NavigationRoutes.CustomerStatements => _permissions.CanViewDebt(),
+                NavigationRoutes.Products => _permissions.CanViewInventory(),
+                NavigationRoutes.Reports => _permissions.CanViewReports(),
+                NavigationRoutes.Settings => _permissions.CanManageSettings(),
+                NavigationRoutes.TemplateDesigner => _permissions.CanManageSettings(),
+                NavigationRoutes.LowStock => _permissions.CanViewLowStock(),
+                NavigationRoutes.UnpaidInvoices => _permissions.CanViewDebt(),
+                NavigationRoutes.AccountStatement => _permissions.CanViewDebt(),
+                NavigationRoutes.ReceiveStock => _permissions.CanViewInventory(),
+                NavigationRoutes.GrnPreview => _permissions.CanViewInventory(),
+                _ => true // Default allow for unknown routes
+            };
         }
 
         private string[] GetRequiredFeaturesForRoute(string route)

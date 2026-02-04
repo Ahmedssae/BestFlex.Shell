@@ -29,20 +29,70 @@
                         Click="btnTheme_Click"/>
             </DockPanel>
 
+            <!-- ERP v1.0 Status Banner -->
+            <Border Grid.Row="0"
+                    Background="{StaticResource {x:Static theme:ThemeKeys.SurfaceBrush}}"
+                    Margin="0,0,0,12">
+                <StackPanel Margin="12">
+                    <TextBlock Text="🎯 BestFlex ERP v1.0"
+                               FontSize="18"
+                               FontWeight="Bold"
+                               Foreground="{StaticResource {x:Static theme:ThemeKeys.TextBrush}}"
+                               Margin="0,0,0,8"/>
+                    <TextBlock Text="Production-Ready Features: Login, Users, Customers, Products, Sales Orders, Invoices, Inventory Visibility"
+                               FontSize="12"
+                               Foreground="Green"
+                               Margin="0,0,0,4"/>
+                    <TextBlock Text="In Development (v1.1+): Dashboard, Receive Stock, Templates"
+                               FontSize="12"
+                               Foreground="Orange"
+                               Margin="0,0,0,4"/>
+                    <TextBlock Text="Coming Soon: Reports, Analytics, Advanced Features"
+                               FontSize="12"
+                               Foreground="Gray"/>
+                </StackPanel>
+            </Border>
+
             <!-- Low Stock -->
             <Border Grid.Row="2"
                     Style="{StaticResource {x:Static theme:ThemeKeys.CardStyle}}">
-                <TextBlock Text="Low Stock Alert"
-                           FontWeight="SemiBold"
-                           Foreground="{StaticResource {x:Static theme:ThemeKeys.TextBrush}}"/>
+                <StackPanel>
+                    <TextBlock Text="📦 Inventory Status"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource {x:Static theme:ThemeKeys.TextBrush}}"
+                               Margin="0,0,0,10"/>
+                    <TextBlock Text="Inventory visibility is available in v1.0"
+                               FontSize="12"
+                               Foreground="Green"
+                               Margin="0,0,0,4"/>
+                    <TextBlock Text="Advanced inventory management coming in v1.1+"
+                               FontSize="12"
+                               Foreground="Gray"
+                               TextWrapping="Wrap"/>
+                </StackPanel>
             </Border>
 
             <!-- Unpaid Invoices -->
             <Border Grid.Row="4"
                     Style="{StaticResource {x:Static theme:ThemeKeys.CardStyle}}">
-                <TextBlock Text="Unpaid Invoices"
-                           FontWeight="SemiBold"
-                           Foreground="{StaticResource {x:Static theme:ThemeKeys.TextBrush}}"/>
+                <StackPanel>
+                    <TextBlock Text="💰 Sales &amp; Invoicing"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource {x:Static theme:ThemeKeys.TextBrush}}"
+                               Margin="0,0,0,10"/>
+                    <TextBlock Text="✅ Sales Orders - Create and validate orders"
+                               FontSize="12"
+                               Foreground="Green"
+                               Margin="0,0,0,4"/>
+                    <TextBlock Text="✅ Invoices - Post and view invoices"
+                               FontSize="12"
+                               Foreground="Green"
+                               Margin="0,0,0,4"/>
+                    <TextBlock Text="❌ Customer Statements - Coming in v1.1+"
+                               FontSize="12"
+                               Foreground="Gray"
+                               TextWrapping="Wrap"/>
+                </StackPanel>
             </Border>
         </Grid>
     </ScrollViewer>

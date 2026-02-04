@@ -83,3 +83,8 @@ Global
 		SolutionGuid = {2BDFD75D-1D70-4FED-B993-E49C605D2020}
 	EndGlobalSection
 EndGlobal
+
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {2BDFD75D-1D70-4FED-B993-E49C605D2020}
+	EndGlobalSection
+EndGlobal

@@ -30,7 +30,7 @@ namespace BestFlex.Shell.Windows
 
         private async Task ReloadAsync(CancellationToken ct = default)
         {
-            await _vm.LoadAsync(Threshold, cap: 2000, ct);
+            await _vm.LoadAsync("Main", Threshold, includeInactive: false);
             // window is UI-only: summary binding may be in XAML; keep existing txtSummary update for parity
             txtSummary.Text = $"Total low-stock items: {_vm.Total}";
         }

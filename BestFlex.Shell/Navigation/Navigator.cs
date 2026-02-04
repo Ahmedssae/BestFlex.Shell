@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Windows.Controls;
 using BestFlex.Shell.Pages;
+using Microsoft.Extensions.Logging;
 
 namespace BestFlex.Shell.Navigation
 {
@@ -18,8 +19,14 @@ namespace BestFlex.Shell.Navigation
     public class Navigator : INavigator
     {
         private readonly Dictionary<string, Func<UserControl>> _routes = new(StringComparer.OrdinalIgnoreCase);
+        private readonly ILogger<Navigator>? _logger;
         public UserControl? Current { get; private set; }
         public event EventHandler? Navigated;
+        
+        public Navigator(ILogger<Navigator>? logger = null)
+        {
+            _logger = logger;
+        }
         
         public void Register(string route, Func<UserControl> factory) => _routes[route] = factory ?? throw new ArgumentNullException(nameof(factory));
         
@@ -37,7 +44,9 @@ namespace BestFlex.Shell.Navigation
             {
                 if (!_routes.TryGetValue(route, out var factory))
                 {
-                    Current = new SafeFallbackPage($"Unknown route: {route}");
+                    var fullError = $"Unknown route: {route}";
+                    _logger?.LogError("Navigation failed: {Error}", fullError);
+                    Current = new SafeFallbackPage(fullError);
                     Navigated?.Invoke(this, EventArgs.Empty);
                     return false;
                 }
@@ -49,14 +58,18 @@ namespace BestFlex.Shell.Navigation
                 }
                 catch (Exception ex)
                 {
-                    Current = new SafeFallbackPage($"Page constructor failed for '{route}': {ex.Message}");
+                    var fullError = $"Page constructor failed for '{route}': {ex.Message}";
+                    _logger?.LogError(ex, "Page constructor failed for route {Route}: {FullException}", route, ex.ToString());
+                    Current = new SafeFallbackPage(fullError);
                     Navigated?.Invoke(this, EventArgs.Empty);
                     return false;
                 }
                 
                 if (page == null)
                 {
-                    Current = new SafeFallbackPage($"Page factory returned null for: {route}");
+                    var fullError = $"Page factory returned null for: {route}";
+                    _logger?.LogError("Page factory returned null for route {Route}", route);
+                    Current = new SafeFallbackPage(fullError);
                     Navigated?.Invoke(this, EventArgs.Empty);
                     return false;
                 }
@@ -67,7 +80,9 @@ namespace BestFlex.Shell.Navigation
             }
             catch (Exception ex)
             {
-                Current = new SafeFallbackPage(errorMessage ?? $"Failed to load page '{route}': {ex.Message}");
+                var fullError = errorMessage ?? $"Failed to load page '{route}': {ex.Message}";
+                _logger?.LogError(ex, "Navigation failed for route {Route}: {FullException}", route, ex.ToString());
+                Current = new SafeFallbackPage(fullError);
                 Navigated?.Invoke(this, EventArgs.Empty);
                 return false;
             }

@@ -16,7 +16,13 @@ namespace BestFlex.Shell
             _vm = app.Services.GetRequiredService<NewSaleViewModel>();
             DataContext = _vm;
 
-            Loaded += async (_, __) => await _vm.InitializeAsync();
+            Loaded += (_, __) => 
+            {
+                // NO InitializeAsync - new ViewModel starts with explicit state, no background loading
+            };
+            
+            // Dispose ViewModel when window is closed to prevent memory leaks
+            Closed += (_, _) => (_vm as IDisposable)?.Dispose();
         }
 
         private void Close_Click(object sender, RoutedEventArgs e) => Close();

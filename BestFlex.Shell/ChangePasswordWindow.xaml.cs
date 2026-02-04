@@ -18,7 +18,7 @@ namespace BestFlex.Shell
         {
             InitializeComponent();
             var app = (App)System.Windows.Application.Current;
-            _vm = new ChangePasswordViewModel(app.Services, app.Services.GetRequiredService<IAuditService>());
+            _vm = new ChangePasswordViewModel("current-user", "");
             DataContext = _vm;
             
             Loaded += (_, __) => CurrentBox.Focus();

@@ -1,0 +1,120 @@
+<Window x:Class="BestFlex.Shell.Views.InventoryOverviewWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="Inventory Overview" Height="700" Width="1200"
+        WindowStartupLocation="CenterScreen">
+    
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <TextBlock Grid.Row="0" Text="Inventory Overview" FontSize="24" FontWeight="Bold" Margin="0,0,0,20"/>
+
+        <!-- Summary Cards -->
+        <Grid Grid.Row="1" Margin="0,0,0,20">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Total Products Card -->
+            <Border Grid.Column="0" Background="#F0F8FF" BorderBrush="#4682B4" BorderThickness="1" CornerRadius="5" Padding="15" Margin="0,0,5,0">
+                <StackPanel>
+                    <TextBlock Text="Total Products" FontSize="12" Foreground="#666"/>
+                    <TextBlock Text="{Binding TotalProducts}" FontSize="24" FontWeight="Bold" Foreground="#4682B4"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Total Stock Value Card -->
+            <Border Grid.Column="1" Background="#F0FFF0" BorderBrush="#228B22" BorderThickness="1" CornerRadius="5" Padding="15" Margin="5,0">
+                <StackPanel>
+                    <TextBlock Text="Total Stock Value" FontSize="12" Foreground="#666"/>
+                    <TextBlock Text="{Binding TotalStockValue, StringFormat=C}" FontSize="24" FontWeight="Bold" Foreground="#228B22"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Available Stock Card -->
+            <Border Grid.Column="2" Background="#FFF0F5" BorderBrush="#DC143C" BorderThickness="1" CornerRadius="5" Padding="15" Margin="5,0">
+                <StackPanel>
+                    <TextBlock Text="Available Stock" FontSize="12" Foreground="#666"/>
+                    <TextBlock Text="{Binding TotalAvailableStock}" FontSize="24" FontWeight="Bold" Foreground="#DC143C"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Reserved Stock Card -->
+            <Border Grid.Column="3" Background="#FFF8DC" BorderBrush="#DAA520" BorderThickness="1" CornerRadius="5" Padding="15" Margin="5,0">
+                <StackPanel>
+                    <TextBlock Text="Reserved Stock" FontSize="12" Foreground="#666"/>
+                    <TextBlock Text="{Binding TotalReservedStock}" FontSize="24" FontWeight="Bold" Foreground="#DAA520"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Valuation Method Card -->
+            <Border Grid.Column="4" Background="#F5F5F5" BorderBrush="#808080" BorderThickness="1" CornerRadius="5" Padding="15" Margin="5,0,0,0">
+                <StackPanel>
+                    <TextBlock Text="Valuation Method" FontSize="12" Foreground="#666"/>
+                    <TextBlock Text="{Binding ValuationMethod}" FontSize="24" FontWeight="Bold" Foreground="#808080"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- Search and Filters -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,10">
+            <TextBox Text="{Binding SearchTerm, UpdateSourceTrigger=PropertyChanged}" 
+                     Width="200" Height="30" Margin="0,0,10,0"
+                     VerticalContentAlignment="Center"/>
+            <CheckBox Content="Include Inactive" IsChecked="{Binding IncludeInactive}" 
+                      VerticalAlignment="Center" Margin="0,0,10,0"/>
+            <Button Content="Refresh" Command="{Binding RefreshCommand}" 
+                    Width="80" Height="30" Margin="0,0,10,0"/>
+            <Button Content="View Details" Command="{Binding ViewDetailsCommand}" 
+                    Width="100" Height="30"/>
+        </StackPanel>
+
+        <!-- Inventory List -->
+        <DataGrid Grid.Row="2" ItemsSource="{Binding InventoryItems}" 
+                  SelectedItem="{Binding SelectedItem}"
+                  AutoGenerateColumns="False" 
+                  CanUserAddRows="False" 
+                  CanUserDeleteRows="False"
+                  IsReadOnly="True"
+                  GridLinesVisibility="Horizontal"
+                  HeadersVisibility="Column"
+                  Margin="0,40,0,0">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Product ID" Binding="{Binding ProductId}" Width="80"/>
+                <DataGridTextColumn Header="SKU" Binding="{Binding SKU}" Width="100"/>
+                <DataGridTextColumn Header="Product Name" Binding="{Binding ProductName}" Width="200"/>
+                <DataGridTextColumn Header="Total Qty" Binding="{Binding TotalQuantity}" Width="80"/>
+                <DataGridTextColumn Header="Available" Binding="{Binding AvailableQuantity}" Width="80"/>
+                <DataGridTextColumn Header="Reserved" Binding="{Binding ReservedQuantity}" Width="80"/>
+                <DataGridTextColumn Header="Unit Cost" Binding="{Binding UnitCost, StringFormat=C}" Width="100"/>
+                <DataGridTextColumn Header="Total Value" Binding="{Binding TotalValue, StringFormat=C}" Width="120"/>
+                <DataGridTextColumn Header="Valuation" Binding="{Binding ValuationMethod}" Width="80"/>
+                <DataGridTextColumn Header="Utilization" Binding="{Binding UtilizationPercentage, StringFormat=F1}" Width="90"/>
+                <DataGridTextColumn Header="Status" Binding="{Binding UtilizationStatus}" Width="80"/>
+                <DataGridTextColumn Header="Last Updated" Binding="{Binding LastUpdatedFormatted}" Width="130"/>
+                <DataGridTextColumn Header="Active" Binding="{Binding Status}" Width="60"/>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <!-- Status Bar -->
+        <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,10,0,0">
+            <ProgressBar IsIndeterminate="True" Height="20" Width="200" 
+                         Visibility="{Binding IsLoading, Converter={StaticResource BoolToVisibilityConverter}}"/>
+            <TextBlock Text="{Binding ErrorMessage}" Foreground="Red" 
+                       Margin="10,0,0,0" VerticalAlignment="Center"/>
+        </StackPanel>
+    </Grid>
+</Window>
